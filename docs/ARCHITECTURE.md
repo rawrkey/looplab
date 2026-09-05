@@ -334,26 +334,59 @@ only.
 
 - **Repo** `Projects/looplab` with `src/` mirroring Studio 1:1 (Rojo) and
   `docs/`.
-- **Server** (`ServerScriptService.LOOPlab.Server`): `Services/` (13 modules +
-  RemoteGuardService), `Activities/` (ChaosRun, DodgeLab, BuildBlitz,
-  SequenceSprint), `Bootstrap` Script.
+- **Server** (`ServerScriptService.LOOPlab.Server`): `Services/` (15 modules
+  including RemoteGuardService, PollService, ProgressionService, SpectatorService,
+  SurvivalMatchService, RewardService, LeaderboardService, DailyChallengeService,
+  CosmeticService, MonetizationService), `Activities/` (ChaosRun, DodgeLab,
+  BuildBlitz, SequenceSprint), `Bootstrap` Script.
 - **Shared** (`ReplicatedStorage.LOOPlab`): `Shared/` (Types, ActivityContract,
   ActivityRegistry, RemoteDefinitions, RemoteBuilder), `Configuration/`
-  (GameConfig), runtime `Remotes/`.
+  (GameConfig), runtime `Remotes/` (auto-created at runtime by RemoteBuilder).
 - **Client** (`StarterPlayerScripts.LOOPlab.Client`): `Bootstrap` LocalScript,
-  `Components/` (9 Screens including new Cosmetics + ViewController, UIKit,
-  Theme, EffectsService, AudioService), `Controllers/` (Hub, Queue, Match,
-  Spectator, Progression, Leaderboard). UI is built into a single runtime
-  ScreenGui under PlayerGui.
-- **Progression UX (final):** Hub shows level/XP/coins + mastery strip + per
-  activity bests; Profile shows stats/mastery/badges/titles/records with daily
-  claim; new Cosmetics screen lists owned titles + badge collection; Results
-  shows mastery + rewards; MatchHud has survival intensity ladder (Final3 /
-  Final2 banners + escalating music); server-pushed Fx queue renders
-  badges/titles/mastery/personal-best moments.
-- **Sync:** poll-based fallback via PollService (v2), RemoteEvents fire for
-  production; playtested end-to-end (standalone + solo survival → Results,
-  coins/XP/mastery/badges awarded, victory overlay, results→hub dismissal,
-  cosmetics/profile/leaderboards/settings navigation, reduced-motion persist).
-- **Remaining:** Datastore-backed leaderboards/dailies confirmed, cosmetics
-  purchase flow, in-Studio multiplayer verification.
+  `Components/` (9 Screens: Hub, Queue, MatchHud, Spectator, Results, Profile,
+  Cosmetics, Leaderboards, Settings + ViewController, UIKit, Theme,
+  EffectsService, AudioService), `Controllers/` (HubController, QueueController,
+  MatchController, SpectatorController, ProgressionController, LeaderboardController).
+  UI is built into a single runtime ScreenGui under PlayerGui.
+
+### Progression UX (final)
+- Hub shows LOOPLAB brand + level/XP/coins + mastery rank + Survival
+  flagship card + 2×2 activity grid + nav bar. Per-activity accent drives the
+  card top stripe and queue panel color.
+- Profile shows identity header (avatar ring + level + title + mastery),
+  stat grid, records strip, badge wall, scrollable title row, daily claim
+  bar.
+- Cosmetics screen: title showcase (tappable to equip) + full badge wall
+  rendering all 12 configured badges.
+- Results: podium layout (`1ST/2ND/3RD` chips for the top three), animated
+  row entrance, mode chip, reward bar.
+- MatchHud: live mode-aware survival intensity bar (lerps from success-green
+  to per-activity accent as rounds advance), low-time warning color, round
+  counter, sub-label slot.
+- EffectsService: countdown (display font), reveal cards (level up, badge,
+  title, mastery up, personal best), banner, elimination flash, victory.
+
+### Sync strategy
+- PollService is the sync backbone (RemoteEvent `Connect` is unavailable in
+  some Studio play modes).
+- Every client runs a poll loop calling `Remotes.Functions.PollActivity`
+  every ~0.45s; the response carries `Activity`, `Economy`, `Toasts`, `Fx`,
+  and `Daily` payloads. The server also fires RemoteEvents for production
+  parity.
+- The `Fx` queue drains server-generated progression moments
+  (Badge/Title/MasteryUp/PersonalBest) on each poll.
+
+### Tested
+- End-to-end standalone (single-player) flow: queue → activity → results
+  → coins/XP/mastery awarded → return to hub.
+- All 15 services load cleanly in Studio. All 4 activities register
+  successfully.
+- Studio console shows expected `DataStoreService: StudioAccessToApisNotAllowed`
+  on `GetAsync` — this is a Studio environment limitation, not an
+  implementation bug. Production runtime will use the real DataStore.
+
+### Remaining
+- Cosmetics purchase flow against real Robux (MonetizationService is
+  shell-only at MVP).
+- In-Studio multiplayer Survival verification (current Studio has only one
+  client; documented as PASS WITH LIMITATION).

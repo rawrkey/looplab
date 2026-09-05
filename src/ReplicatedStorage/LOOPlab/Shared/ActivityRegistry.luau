@@ -31,9 +31,8 @@ function Registry.Get(activityId: string)
 	return Registry._byId[activityId]
 end
 
-function Registry.GetDef(activityId: string): any
-	return Registry._byId[activityId]
-end
+-- Backwards-compatible alias. Use Registry.Get going forward.
+Registry.GetDef = Registry.Get
 
 function Registry.List(): { any }
 	local out = {}

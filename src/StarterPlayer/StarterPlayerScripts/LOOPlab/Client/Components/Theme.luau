@@ -1,4 +1,4 @@
--- Theme: LOOPLAB visual identity — brand palette, typography, spacing, motion tokens.
+-- Theme: LOOPLAB visual identity - brand palette, typography, spacing, motion tokens.
 -- Single source of truth for the game's look. UI never hard-codes colors.
 
 local Theme = {}
@@ -14,10 +14,10 @@ Theme.Brand = {
 }
 
 Theme.Palette = {
-	Background = Color3.fromRGB(13, 15, 26),
-	BackgroundAlt = Color3.fromRGB(22, 26, 42),
-	Panel = Color3.fromRGB(30, 34, 54),
-	PanelAlt = Color3.fromRGB(41, 46, 72),
+	Background = Color3.fromRGB(11, 13, 22),
+	BackgroundAlt = Color3.fromRGB(20, 23, 38),
+	Panel = Color3.fromRGB(28, 32, 50),
+	PanelAlt = Color3.fromRGB(40, 45, 70),
 	Stroke = Color3.fromRGB(255, 255, 255),
 	StrokeDim = Color3.fromRGB(140, 150, 190),
 	Text = Color3.fromRGB(240, 243, 255),
@@ -32,7 +32,11 @@ Theme.Opacity = {
 	Glow = 0.15,
 	Soft = 0.3,
 	Dim = 0.5,
-	Scrim = 0.72,
+	Scrim = 0.65,
+	ScrimDeep = 0.82,
+	Card = 0.08,
+	CardHover = 0.12,
+	CardPressed = 0.04,
 }
 
 Theme.Border = {
@@ -43,8 +47,8 @@ Theme.Border = {
 }
 
 Theme.Shadow = {
-	Offset = Vector2.new(0, 3),
-	Transparency = 0.6,
+	Offset = Vector2.new(0, 4),
+	Transparency = 0.55,
 }
 
 Theme.Type = {
@@ -52,26 +56,38 @@ Theme.Type = {
 	Header = Enum.Font.GothamBold,
 	Body = Enum.Font.Gotham,
 	Mono = Enum.Font.Code,
+	Display = Enum.Font.GothamBold,
 }
 
 Theme.TypeSize = {
-	Hero = 48,
-	Huge = 34,
-	Title = 26,
+	Display = 64,
+	Hero = 44,
+	Huge = 32,
+	Title = 24,
 	Header = 20,
-	Body = 16,
+	Body = 15,
 	Small = 13,
 	Tiny = 11,
+	Micro = 9,
 }
 
 Theme.Radius = {
 	Small = UDim.new(0, 8),
 	Medium = UDim.new(0, 14),
 	Large = UDim.new(0, 20),
+	XLarge = UDim.new(0, 28),
 	Pill = UDim.new(1, 0),
 }
 
-Theme.Spacing = { 4, 8, 12, 16, 24, 32, 48 }
+Theme.Spacing = { 4, 8, 12, 16, 24, 32, 48, 64 }
+
+Theme.Stroke = {
+	None = 0,
+	Hairline = 1,
+	Thin = 2,
+	Std = 3,
+	Thick = 4,
+}
 
 Theme.Motion = {
 	Instant = 0.05,
@@ -79,6 +95,7 @@ Theme.Motion = {
 	Quick = 0.2,
 	Normal = 0.32,
 	Slow = 0.55,
+	Slower = 0.8,
 }
 
 Theme.MotionEaseIn = Enum.EasingStyle.Quad
@@ -114,9 +131,18 @@ end
 
 function Theme.WithAlpha(color: Color3, alpha: number): Color3
 	return Color3.fromRGB(
-		math.floor(color.R * 255 * alpha + 13 * (1 - alpha)),
-		math.floor(color.G * 255 * alpha + 15 * (1 - alpha)),
-		math.floor(color.B * 255 * alpha + 26 * (1 - alpha))
+		math.floor(color.R * 255 * alpha + 11 * (1 - alpha)),
+		math.floor(color.G * 255 * alpha + 13 * (1 - alpha)),
+		math.floor(color.B * 255 * alpha + 22 * (1 - alpha))
+	)
+end
+
+function Theme.Lighten(color: Color3, amount: number): Color3
+	amount = math.clamp(amount or 0.15, 0, 1)
+	return Color3.fromRGB(
+		math.min(255, math.floor(color.R * 255 + 255 * amount)),
+		math.min(255, math.floor(color.G * 255 + 255 * amount)),
+		math.min(255, math.floor(color.B * 255 + 255 * amount))
 	)
 end
 
@@ -143,6 +169,11 @@ function Theme.PodiumColor(place: number): Color3
 	if place == 2 then return Color3.fromRGB(200, 210, 225) end
 	if place == 3 then return Color3.fromRGB(210, 140, 90) end
 	return Theme.Palette.TextDim
+end
+
+function Theme.IsTouch(): boolean
+	local UIS = game:GetService("UserInputService")
+	return UIS.TouchEnabled and not UIS.KeyboardEnabled
 end
 
 return Theme

@@ -6,6 +6,7 @@ local Players = game:GetService("Players")
 local RemoteBuilder = require(ReplicatedStorage:WaitForChild("LOOPlab").Shared.RemoteBuilder)
 local remotes = RemoteBuilder.GetAll()
 local GameConfig = require(ReplicatedStorage.LOOPlab.Configuration.GameConfig)
+local Theme = require(script.Parent.Parent.Components.Theme)
 local ViewController = require(script.Parent.Parent.Components.ViewController)
 local AudioService = require(script.Parent.Parent.Components.AudioService)
 local EffectsService = require(script.Parent.Parent.Components.EffectsService)
@@ -26,10 +27,12 @@ function HubController.Init(screens)
 		if action == "Play" then
 			AudioService.PlayClick()
 			local isSurvival = cfg.id == "survival"
+			local accent = isSurvival and Theme.Accent("survival") or Theme.Accent(cfg.id)
 			View.Show("Queue", {
 				Title = (cfg.name or cfg.id):upper(),
 				Target = isSurvival and GameConfig.Survival.LobbySize or GameConfig.ActivityDefaults.MaxPlayers,
 				Message = isSurvival and "Survival lobby is filling..." or "Standing by...",
+				Accent = accent,
 			})
 			local okJoin, res = pcall(function()
 				return remotes.Functions.QueueJoin:InvokeServer(cfg.id)

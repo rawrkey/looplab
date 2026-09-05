@@ -146,11 +146,11 @@ function Service.ApplyGroupElimination(match, scoresheet)
 
 	local sorted = {}
 	for _, row in scoresheet.Rows do
-		if match.aliveByUserId[row.Player.UserId] then
+		if row and row.Player and match.aliveByUserId[row.Player.UserId] then
 			table.insert(sorted, row)
 		end
 	end
-	table.sort(sorted, function(a, b) return a.Score > b.Score end)
+	table.sort(sorted, function(a, b) return (a.Score or 0) > (b.Score or 0) end)
 
 	local survivors = {}
 	local eliminated = {}
@@ -215,6 +215,7 @@ function Service.FinishMatch(match)
 	local rows = {}
 	local rewardsByUser = {}
 	for _, p in match.players do
+		if not p or not p.Parent then continue end
 		local rank = placements[p.UserId] and placements[p.UserId].rank or (#match.players)
 		local granted = RewardService.GrantSurvivalOutcome(p, rank, "sv_match" .. tostring(match.startedAt))
 
@@ -224,12 +225,14 @@ function Service.FinishMatch(match)
 		end
 
 		local data = PlayerData.GetForPlayer(p)
-		data.Survival.Matches += 1
-		if rank == 1 then data.Survival.Wins += 1 end
-		if rank <= 3 then data.Survival.Podiums += 1 end
-		data.Survival.RoundsSurvived += survived
-		if data.Survival.BestPlacement == 0 or rank < data.Survival.BestPlacement then
-			data.Survival.BestPlacement = rank
+		if data and data.Survival then
+			data.Survival.Matches += 1
+			if rank == 1 then data.Survival.Wins += 1 end
+			if rank <= 3 then data.Survival.Podiums += 1 end
+			data.Survival.RoundsSurvived += survived
+			if data.Survival.BestPlacement == 0 or rank < data.Survival.BestPlacement then
+				data.Survival.BestPlacement = rank
+			end
 		end
 		local fx = Progression.ProcessSurvival(p, rank, survived, match.totalRounds)
 		PlayerData.SavePlayer(p)
@@ -238,12 +241,12 @@ function Service.FinishMatch(match)
 		Daily.RecordProgress(p, "survival", rank)
 
 		rewardsByUser[p.UserId] = {
-			Coins = data.Coins,
-			Xp = data.Xp,
+			Coins = data and data.Coins or 0,
+			Xp = data and data.Xp or 0,
 			Granted = granted or { Xp = 0, Coins = 0 },
 			Fx = fx,
-			MasteryXp = data.MasteryXp,
-			MasteryRank = Progression.GetMasteryRank(data.MasteryXp),
+			MasteryXp = data and data.MasteryXp or 0,
+			MasteryRank = Progression.GetMasteryRank(data and data.MasteryXp or 0),
 		}
 		table.insert(rows, {
 			UserId = p.UserId,
@@ -255,31 +258,35 @@ function Service.FinishMatch(match)
 	end
 
 	for _, p in match.players do
-		_remotes.Events.Winner:FireClient(p, {
-			WinnerUserId = winner and winner.UserId or 0,
-			WinnerName = winner and winner.Name or "none",
-			Rewards = rewardsByUser[p.UserId] or {},
-			Rows = rows,
-		})
-		_remotes.Events.Results:FireClient(p, {
-			Mode = "Survival",
-			ActivityId = "survival",
-			Rows = rows,
-		})
+		if p and p.Parent then
+			_remotes.Events.Winner:FireClient(p, {
+				WinnerUserId = winner and winner.UserId or 0,
+				WinnerName = winner and winner.Name or "none",
+				Rewards = rewardsByUser[p.UserId] or {},
+				Rows = rows,
+			})
+			_remotes.Events.Results:FireClient(p, {
+				Mode = "Survival",
+				ActivityId = "survival",
+				Rows = rows,
+			})
+		end
 	end
 
 	Analytics.Fire(winner, "SurvivalFinished", { a = tostring(rows[1] and rows[1].Place), b = tostring(rows[1] and rows[1].UserId) })
 
 	for _, p in match.players do
-		_matchResults[p.UserId] = {
-			Mode = "Results",
-			GameMode = "Survival",
-			ActivityId = "survival",
-			Rows = rows,
-			Rewards = rewardsByUser[p.UserId] or {},
-			WinnerUserId = winner and winner.UserId or 0,
-			WinnerName = winner and winner.Name or "none",
-		}
+		if p then
+			_matchResults[p.UserId] = {
+				Mode = "Results",
+				GameMode = "Survival",
+				ActivityId = "survival",
+				Rows = rows,
+				Rewards = rewardsByUser[p.UserId] or {},
+				WinnerUserId = winner and winner.UserId or 0,
+				WinnerName = winner and winner.Name or "none",
+			}
+		end
 	end
 	_currentMatch = nil
 end

@@ -67,17 +67,15 @@ end
 
 function Poll.Setup()
 	local guard = require(script.Parent.RemoteGuardService)
+	local Daily = require(script.Parent.DailyChallengeService)
 	guard.BindFunction(_remotes.Functions.PollActivity, function(player)
 		local toasts = _toasts[player.UserId]
 		_toasts[player.UserId] = nil
 		local fx = _fx[player.UserId]
 		_fx[player.UserId] = nil
-		local daily = pcall(require, script.Parent.DailyChallengeService)
 		local dailyState = nil
-		if daily then
-			local ok2, ds = pcall(function() return daily.GetState(player) end)
-			if ok2 and ds then dailyState = ds end
-		end
+		local ok, ds = pcall(Daily.GetState, Daily, player)
+		if ok and type(ds) == "table" then dailyState = ds end
 		return {
 			Activity = activityFor(player),
 			Economy = economyFor(player),

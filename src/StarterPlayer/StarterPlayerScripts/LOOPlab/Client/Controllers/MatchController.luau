@@ -60,8 +60,8 @@ function MatchController.RoundBegin(payload)
 	TotalRounds = payload.TotalRounds or 1
 	_finalShown = {}
 
-	Hud:SetActivity(ActivityName, Accent)
-	Hud:SetState({ Round = Round, TotalRounds = TotalRounds, Phase = "Eliminating", Message = payload.Message or "" })
+	Hud:SetActivity(ActivityName, Accent, Mode)
+	Hud:SetState({ Round = Round, TotalRounds = TotalRounds, Phase = "Running", Message = payload.Message or "" })
 
 	ViewController.Show("MatchHud")
 
@@ -75,11 +75,11 @@ function MatchController.RoundBegin(payload)
 		end)
 	elseif Mode == "Survival" then
 		AudioService.PlayActivityMusic(ActivityId, survivalIntensity(Round, TotalRounds))
-		task.delay(0.5, function()
+		task.delay(0.4, function()
 			EffectsService.RoundBanner(Round, TotalRounds, ActivityName, Accent)
 			AudioService.PlayCountdown()
 		end)
-		task.delay(1.1, function()
+		task.delay(1.0, function()
 			EffectsService.Countdown(3, function()
 				AudioService.PlayGo()
 			end)
@@ -89,10 +89,21 @@ end
 
 function MatchController.ActivityUpdate(payload)
 	if not Hud then return end
-	Hud:SetState({
-		TimeLeft = type(payload.TimeLeft) == "number" and payload.TimeLeft or nil,
-		Phase = type(payload.Phase) == "string" and payload.Phase or nil,
-	})
+	local update = {}
+	if type(payload.TimeLeft) == "number" then update.TimeLeft = payload.TimeLeft end
+	if type(payload.Phase) == "string" then update.Phase = payload.Phase end
+	if payload.Message then update.Message = payload.Message end
+	if payload.ActivityId then update.ActivityId = payload.ActivityId end
+	if payload.Mode then update.Mode = payload.Mode end
+	if payload.Round then update.Round = payload.Round end
+	if payload.TotalRounds then update.TotalRounds = payload.TotalRounds end
+	if payload.SubLabel then update.SubLabel = payload.SubLabel end
+	if Mode == "Survival" then
+		local total = TotalRounds or 4
+		update.IntensityLevel = survivalIntensity(Round, total)
+		update.IntensityMax = total
+	end
+	Hud:SetState(update)
 end
 
 function MatchController.Elimination(payload)

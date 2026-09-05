@@ -123,6 +123,7 @@ function ActivityService.EndSession(sessionId: string)
 			end
 		end
 		for _, p in session.Players do
+			if not p then continue end
 			_lastResults[p.UserId] = {
 				Mode = "Results",
 				GameMode = "Standalone",

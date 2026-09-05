@@ -1,5 +1,4 @@
 -- Cosmetics: title showcase + equip and badge collection wall.
--- Titles come from GameConfig.Titles; ownership from player profile (Titles list).
 
 local UIKit = require(script.Parent.Parent.UIKit)
 local Theme = require(script.Parent.Parent.Theme)
@@ -36,7 +35,7 @@ function Cosmetics:Show(data)
 		self:BuildTitles()
 		self:BuildBadges(data.Badges or {})
 	end
-	UIKit.SlideIn(self.Panel, 0.03, Theme.Motion.Normal)
+	UIKit.SlideUpIn(self.Panel, 0.04, Theme.Motion.Normal)
 end
 
 function Cosmetics:Build(parent)
@@ -48,63 +47,65 @@ function Cosmetics:Build(parent)
 	self.Root = root
 	self.Store = {}
 
-	local scrim = UIKit.Frame({ Parent = root, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.5, BorderSizePixel = 0 })
+	local scrim = UIKit.Frame({ Parent = root, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Theme.Palette.Scrim, BackgroundTransparency = Theme.Opacity.Scrim })
+	scrim.BorderSizePixel = 0
 
-	local panel = UIKit.PanelAlt(root, UDim2.new(0.72, 0, 0.88, 0), Theme.Brand.Secondary)
+	local panel = UIKit.Card(root, UDim2.new(0.72, 0, 0.84, 0), Theme.Brand.Secondary)
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
+	panel.BackgroundTransparency = Theme.Opacity.Card
 	self.Panel = panel
 
-	local title = UIKit.Title(panel, "COSMETICS", UDim2.new(1, 0, 0, 44), Theme.Brand.Secondary)
+	local edge = UIKit.Frame({ Parent = panel, Size = UDim2.new(1, 0, 0, 3), AnchorPoint = Vector2.new(0, 0), BackgroundColor3 = Theme.Brand.Secondary })
+	UIKit.Corner(Theme.Radius.Small).Parent = edge
+
+	local title = UIKit.Title(panel, "COSMETICS", UDim2.new(0.94, 0, 0, 36), Theme.Palette.Text)
+	title.AnchorPoint = Vector2.new(0, 0)
+	title.Position = UDim2.new(0.03, 0, 0.04, 0)
 	title.TextScaled = false
 	title.TextSize = Theme.TypeSize.Huge
+	title.TextXAlignment = Enum.TextXAlignment.Left
 
-	-- owned titles section
-	local tTitle = UIKit.Text(panel, "YOUR TITLES · tap to equip", UDim2.new(0.94, 0, 0, 22), Theme.Palette.TextFaint)
-	tTitle.Position = UDim2.new(0.03, 0, 0, 48)
-	tTitle.TextScaled = false
-	tTitle.TextSize = Theme.TypeSize.Small
-	tTitle.TextXAlignment = Enum.TextXAlignment.Left
+	local close = UIKit.Button(panel, "✕", UDim2.fromOffset(34, 34), Theme.Palette.PanelAlt, { textColor = Theme.Palette.TextDim })
+	close.AnchorPoint = Vector2.new(1, 0)
+	close.Position = UDim2.new(0.97, 0, 0.04, 0)
+	close.TextScaled = false
+	close.TextSize = Theme.TypeSize.Small
+	close.Activated:Connect(function()
+		AudioService.PlayClick()
+		if Cosmetics.OnClose then Cosmetics.OnClose() end
+	end)
 
-	local titlesWrap = UIKit.Frame({ Parent = panel, Size = UDim2.new(0.94, 0, 0, 92), Position = UDim2.new(0.03, 0, 0, 74) })
+	local tTitle = UIKit.SectionLabel(panel, "YOUR TITLES · tap to equip", UDim2.new(0.94, 0, 0, 18))
+	tTitle.AnchorPoint = Vector2.new(0, 0)
+	tTitle.Position = UDim2.new(0.03, 0, 0.12, 0)
+
+	local titlesWrap = UIKit.Frame({ Parent = panel, Size = UDim2.new(0.94, 0, 0, 96), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.16, 0) })
 	titlesWrap.BackgroundTransparency = 1
-	local tGrid = Instance.new("UIGridLayout")
-	tGrid.Parent = titlesWrap
-	tGrid.CellSize = UDim2.new(0.24, 0, 0.46, 0)
-	tGrid.CellPadding = UDim2.new(0.012, 0, 0.02, 0)
-	tGrid.FillDirection = Enum.FillDirection.Horizontal
-	tGrid.HorizontalAlignment = Enum.HorizontalAlignment.Left
-	tGrid.SortOrder = Enum.SortOrder.LayoutOrder
 	self.Store.TitlesWrap = titlesWrap
 
-	-- badge collection
-	local bTitle = UIKit.Text(panel, "BADGES · your collection", UDim2.new(0.94, 0, 0, 22), Theme.Palette.TextFaint)
-	bTitle.Position = UDim2.new(0.03, 0, 0, 180)
-	bTitle.TextScaled = false
-	bTitle.TextSize = Theme.TypeSize.Small
-	bTitle.TextXAlignment = Enum.TextXAlignment.Left
+	local bTitle = UIKit.SectionLabel(panel, "BADGES · your collection", UDim2.new(0.94, 0, 0, 18))
+	bTitle.AnchorPoint = Vector2.new(0, 0)
+	bTitle.Position = UDim2.new(0.03, 0, 0.32, 0)
 
-	local badgesWrap = UIKit.Frame({ Parent = panel, Size = UDim2.new(0.94, 0, 0.28, 0) })
-	badgesWrap.Position = UDim2.new(0.03, 0, 0, 206)
+	local badgesWrap = UIKit.Frame({ Parent = panel, Size = UDim2.new(0.94, 0, 0.4, 0), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.36, 0) })
 	badgesWrap.BackgroundTransparency = 1
+	self.Store.BadgesWrap = badgesWrap
 	local bGrid = Instance.new("UIGridLayout")
-	bGrid.Parent = badgesWrap
 	bGrid.CellSize = UDim2.new(0.12, 0, 0.32, 0)
 	bGrid.CellPadding = UDim2.new(0.014, 0, 0.02, 0)
 	bGrid.FillDirection = Enum.FillDirection.Horizontal
 	bGrid.HorizontalAlignment = Enum.HorizontalAlignment.Left
 	bGrid.SortOrder = Enum.SortOrder.LayoutOrder
-	self.Store.BadgesWrap = badgesWrap
+	bGrid.Parent = badgesWrap
 
-	local btn = UIKit.GradientButton(panel, "BACK", UDim2.new(0.3, 0, 0, 40), Theme.Brand.Secondary)
-	btn.AnchorPoint = Vector2.new(0.5, 1)
-	btn.Position = UDim2.new(0.5, 0, 1, -8)
-	btn.TextScaled = false
-	btn.TextSize = Theme.TypeSize.Body
-	btn.Activated:Connect(function()
-		AudioService.PlayClick()
-		if Cosmetics.OnClose then Cosmetics.OnClose() end
-	end)
+	local info = UIKit.Muted(panel, "Titles and badges unlock via progression. Earn XP, win matches, and complete challenges to expand your collection.", UDim2.new(0.94, 0, 0, 36), Theme.Palette.TextDim)
+	info.AnchorPoint = Vector2.new(0.5, 1)
+	info.Position = UDim2.new(0.5, 0, 0.96, 0)
+	info.TextScaled = false
+	info.TextSize = Theme.TypeSize.Tiny
+	info.TextWrapped = true
+	info.TextXAlignment = Enum.TextXAlignment.Center
 end
 
 local COLS = { "Frame", "TextLabel", "TextButton", "ImageLabel", "ImageButton", "ScrollingFrame", "TextBox", "CanvasGroup", "ViewportFrame" }
@@ -118,23 +119,25 @@ end
 function Cosmetics:BuildTitles()
 	if not self.Store or not self.Store.TitlesWrap then return end
 	self:_clear(self.Store.TitlesWrap)
+	if #self.OwnedTitles == 0 then
+		local empty = UIKit.Text(self.Store.TitlesWrap, "No titles yet — earn them through gameplay!", UDim2.new(1, 0, 0, 30), Theme.Palette.TextFaint)
+		empty.TextScaled = false
+		empty.TextSize = Theme.TypeSize.Small
+		return
+	end
 	for index, id in self.OwnedTitles do
 		local def = TableFind(GameConfig.Titles, "Id", id)
 		local display = def and def.Name or id
 		local tier = def and Theme.MasteryColor(def.Tier) or Theme.Brand.Secondary
-		local btn = UIKit.Button(self.Store.TitlesWrap, display, UDim2.fromScale(1, 1), (self.EquippedTitle == id) and tier or Theme.Palette.Panel, { textColor = self.EquippedTitle == id and Color3.new(1, 1, 1) or Theme.Palette.Text })
-		btn.LayoutOrder = index
+		local isEquipped = (self.EquippedTitle == id)
+		local btn = UIKit.Button(self.Store.TitlesWrap, display, UDim2.new(0, 130, 0, 36), isEquipped and tier or Theme.Palette.PanelAlt, { textColor = isEquipped and Color3.new(1, 1, 1) or Theme.Palette.Text })
+		btn.Position = UDim2.new(0, 8 + (index - 1) * 138, 0, 0)
 		btn.TextScaled = false
-		btn.TextSize = Theme.TypeSize.Body
+		btn.TextSize = Theme.TypeSize.Small
 		btn.Activated:Connect(function()
 			AudioService.PlayClick()
 			if Cosmetics.OnEquipTitle then Cosmetics.OnEquipTitle(id) end
 		end)
-	end
-	if #self.OwnedTitles == 0 then
-		local empty = UIKit.Text(self.Store.TitlesWrap, "No titles yet — complete badge challenges!", UDim2.new(1, 0, 0, 30), Theme.Palette.TextFaint)
-		empty.TextScaled = false
-		empty.TextSize = Theme.TypeSize.Small
 	end
 end
 
@@ -146,16 +149,21 @@ function Cosmetics:BuildBadges(owned)
 	for _, id in owned do ownedSet[id] = true end
 	for index, def in GameConfig.Badges do
 		local has = ownedSet[def.Id] == true
-		local box = UIKit.PanelAlt(self.Store.BadgesWrap, UDim2.fromScale(1, 1), has and Theme.Brand.Gold or Theme.Palette.Panel)
+		local box = UIKit.Frame({ Parent = self.Store.BadgesWrap, BackgroundColor3 = has and Theme.WithAlpha(Theme.Brand.Gold, 0.18) or Theme.Palette.Panel })
+		UIKit.Corner(Theme.Radius.Medium).Parent = box
+		UIKit.Stroke(has and Theme.Brand.Gold or Theme.Palette.StrokeDim, 1, has and Theme.Opacity.Subtle or Theme.Opacity.Std).Parent = box
+		box.BackgroundTransparency = has and Theme.Opacity.Card or 0
 		box.LayoutOrder = index
-		box.BackgroundTransparency = has and 0 or 0.5
 		local icon = UIKit.Text(box, def.Icon or "•", UDim2.new(1, 0, 0.5, 0), has and Theme.Brand.Gold or Theme.Palette.TextDim)
+		icon.AnchorPoint = Vector2.new(0.5, 0)
+		icon.Position = UDim2.new(0.5, 0, 0.05, 0)
 		icon.TextScaled = false
 		icon.TextSize = 22
-		local nm = UIKit.Text(box, def.Name, UDim2.new(1, 0, 0.4, 0), has and Theme.Palette.Text or Theme.Palette.TextFaint)
-		nm.Position = UDim2.new(0, 0, 0.52, 0)
+		local nm = UIKit.Muted(box, def.Name, UDim2.new(0.92, 0, 0.4, 0), has and Theme.Palette.Text or Theme.Palette.TextFaint)
+		nm.AnchorPoint = Vector2.new(0.5, 1)
+		nm.Position = UDim2.new(0.5, 0, 0.95, 0)
 		nm.TextScaled = false
-		nm.TextSize = Theme.TypeSize.Tiny
+		nm.TextSize = Theme.TypeSize.Micro
 		box.Name = def.Name
 	end
 end

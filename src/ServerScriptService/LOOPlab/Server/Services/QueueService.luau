@@ -79,7 +79,14 @@ local function startStandalone(activityId)
 	if q.session or #q.players == 0 then return end
 	local def = Registry.Get(activityId)
 	local players = {}
-	for _, p in q.players do players[#players + 1] = p end
+	for _, p in q.players do
+		if p and p.Parent then players[#players + 1] = p end
+	end
+	if #players == 0 then
+		q.session = nil
+		q.players = {}
+		return
+	end
 
 	-- tell clients the match is starting (standalone uses RoundBegin as MatchStart)
 	for _, p in players do
@@ -97,6 +104,7 @@ local function startStandalone(activityId)
 	local res, err = ActivityService.CreateSession(activityId, "Standalone", "Normal", players)
 	if not res then
 		warn("[Queue] failed to start " .. activityId .. ": " .. tostring(err))
+		q.session = nil
 		return
 	end
 	q.session = res.sessionId
@@ -184,9 +192,15 @@ local function startSurvival()
 	if q.session or #q.players == 0 then return end
 	local Survival = require(script.Parent.SurvivalMatchService)
 	local players = {}
-	for _, p in q.players do table.insert(players, p) end
+	for _, p in q.players do
+		if p and p.Parent then table.insert(players, p) end
+	end
 	q.session = true
 	q.players = {}
+	if #players < 1 then
+		q.session = false
+		return
+	end
 	task.spawn(function()
 		local ok, err = pcall(function()
 			Survival.StartSurvivalMatch(players)
@@ -199,6 +213,7 @@ local function startSurvival()
 end
 
 function Service.Enqueue(activityId: string, player: Player): any
+	if not player or not player.Parent then return nil, "invalid player" end
 	if activityId == "survival" then
 		if _survivalQueue.session then return nil, "match already in progress" end
 		for _, p in _survivalQueue.players do
