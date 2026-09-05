@@ -1,5 +1,6 @@
--- Hub: LOOPLAB — Premium Competitive Lab Hub
--- Full-screen immersive with floating layered cards over lab environment
+-- Hub: LOOPLAB — Premium Experimental Lab Hub
+-- Completely different visual composition from original: floating layered elements,
+-- large hero Survival at top, compact cards at bottom, no giant flat panel.
 
 local UIKit = require(script.Parent.Parent.UIKit)
 local Theme = require(script.Parent.Parent.Theme)
@@ -13,10 +14,10 @@ local Hub = {
 }
 
 local ACTIVITIES = {
-	{ id = "chaos_run", name = "Chaos Run", desc = "Checkpoint sprint", accent = Theme.Brand.Primary, icon = "➤" },
-	{ id = "dodge_lab", name = "Dodge Lab", desc = "Dodge hazards", accent = Theme.Brand.Danger, icon = "✦" },
-	{ id = "build_blitz", name = "Build Blitz", desc = "Stack blocks", accent = Theme.Brand.Warning, icon = "▬" },
-	{ id = "sequence_sprint", name = "Sequence Sprint", desc = "Memory pattern", accent = Theme.Brand.Secondary, icon = "⧗" },
+	{ id = "chaos_run", name = "CHAOS RUN", desc = "Checkpoint sprint", accent = Theme.Brand.Primary, icon = "➤" },
+	{ id = "dodge_lab", name = "DODGE LAB", desc = "Dodge the rain", accent = Theme.Brand.Danger, icon = "✦" },
+	{ id = "build_blitz", name = "BUILD BLITZ", desc = "Stack blocks", accent = Theme.Brand.Warning, icon = "▬" },
+	{ id = "sequence_sprint", name = "SEQ. SPRINT", desc = "Memory repeat", accent = Theme.Brand.Secondary, icon = "⧗" },
 }
 
 function Hub:Hide()
@@ -36,250 +37,222 @@ function Hub:Build(parent)
 	})
 	self.Root = root
 
-	-- Full-screen dark lab background (not black void — deep navy with warm glow)
-	local bg = UIKit.Frame({ Parent = root, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(10, 12, 28) })
-	bg.BorderSizePixel = 0
-	local bgGrad = Instance.new("UIGradient")
-	bgGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(12, 14, 30)),
-		ColorSequenceKeypoint.new(0.4, Color3.fromRGB(20, 24, 40)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 12, 28)),
+	-- DARK LAB ENVIRONMENT (not black — deep navy with radial warm glow)
+	local envBg = UIKit.Frame({ Parent = root, Size = UDim2.fromScale(1, 1) })
+	envBg.BackgroundColor3 = Color3.fromRGB(8, 10, 22)
+	envBg.BorderSizePixel = 0
+	local envGrad = Instance.new("UIGradient")
+	envGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(12, 14, 28)),
+		ColorSequenceKeypoint.new(0.3, Color3.fromRGB(30, 20, 50)),
+		ColorSequenceKeypoint.new(0.7, Color3.fromRGB(20, 25, 45)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 10, 22)),
 	})
-	bgGrad.Rotation = 30
-	bgGrad.Parent = bg
+	envGrad.Rotation = 45
+	envGrad.Parent = envBg
 
-	-- Subtle top glow line (atmospheric)
-	local glowLine = UIKit.Frame({ Parent = root, Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = Theme.Brand.Primary, BackgroundTransparency = 0.7 })
-	glowLine.Position = UDim2.new(0, 0, 0, 0)
-	glowLine.BorderSizePixel = 0
+	-- Large glowing top arc (not a panel — decorative)
+	local glowArc = UIKit.Frame({ Parent = root, Size = UDim2.new(1, 0, 0, 3), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.08, 0), BackgroundColor3 = Theme.Brand.Primary })
+	glowArc.BackgroundTransparency = 0.7
+	glowArc.BorderSizePixel = 0
 
-	-- Top navigation (compact, floating, not giant strip)
-	local nav = UIKit.Frame({ Parent = root, Size = UDim2.new(1, -32, 0, 36), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.02, 0) })
-	nav.BackgroundTransparency = 1
-	local navLayout = Instance.new("UIListLayout")
-	navLayout.Padding = UDim.new(0, 10)
-	navLayout.FillDirection = Enum.FillDirection.Horizontal
-	navLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-	navLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	navLayout.Parent = nav
+	-- TOP LEFT — Brand
+	local brandZone = UIKit.Frame({ Parent = root, Size = UDim2.new(0.5, 0, 0, 50), AnchorPoint = Vector2.new(0, 0), Position = UDim2.new(0.03, 0, 0.04, 0) })
+	brandZone.BackgroundTransparency = 1
+	local brandText = UIKit.Title(brandZone, "LOOPLAB", UDim2.new(0, 220, 0, 36), Theme.Brand.Gold)
+	brandText.TextScaled = false
+	brandText.TextSize = Theme.TypeSize.Hero
+	brandText.Font = Theme.Type.Display
+	brandText.TextXAlignment = Enum.TextXAlignment.Left
 
-	local navItems = {
-		{ id = "Profile", icon = "◉", color = Theme.MasteryColor("gold") },
-		{ id = "Cosmetics", icon = "◈", color = Theme.Brand.Secondary },
-		{ id = "Leaderboards", icon = "↺", color = Theme.Brand.Primary },
-		{ id = "Settings", icon = "⚙", color = Theme.Palette.TextDim },
-	}
-	for i, item in navItems do
-		local btn = UIKit.Button(nav, item.icon, UDim2.new(0, 36, 1, 0), Theme.Palette.PanelAlt, { textColor = item.color, noScale = true })
-		btn.LayoutOrder = i
-		btn.TextScaled = false
-		btn.TextSize = Theme.TypeSize.Small
-		btn.Activated:Connect(function()
-			AudioService.PlayClick()
-			if Hub.OnAction then Hub.OnAction(item.id) end
-		end)
-		self.Store["Nav" .. item.id] = btn
-	end
-
-	-- Brand at top-left (not full center — stronger design)
-	local brandArea = UIKit.Frame({ Parent = root, Size = UDim2.new(0.5, 0, 0, 70), AnchorPoint = Vector2.new(0, 0), Position = UDim2.new(0.03, 0, 0.06, 0) })
-	brandArea.BackgroundTransparency = 1
-	local brandName = UIKit.Title(brandArea, "LOOPLAB", UDim2.new(1, 0, 0, 36), Theme.Brand.Gold)
-	brandName.AnchorPoint = Vector2.new(0, 0)
-	brandName.Position = UDim2.new(0, 0, 0, 0)
-	brandName.TextScaled = false
-	brandName.TextSize = Theme.TypeSize.Hero
-	brandName.Font = Theme.Type.Display
-	brandName.TextXAlignment = Enum.TextXAlignment.Left
-
-	local brandSub = UIKit.Muted(brandArea, "TEST · SURVIVE · REPEAT", UDim2.new(1, 0, 0, 14), Theme.Palette.TextDim)
-	brandSub.AnchorPoint = Vector2.new(0, 0)
-	brandSub.Position = UDim2.new(0, 0, 0.6, 0)
+	local brandSub = UIKit.Muted(brandZone, "TEST · SURVIVE · REPEAT", UDim2.new(0, 220, 0, 14), Theme.Palette.TextDim)
+	brandSub.Position = UDim2.new(0, 0, 0.65, 0)
 	brandSub.TextScaled = false
 	brandSub.TextSize = Theme.TypeSize.Tiny
-	brandSub.TextXAlignment = Enum.TextXAlignment.Left
 
-	-- Player status widget — compact, floating near top-left below brand
-	local statusPanel = UIKit.Frame({ Parent = root, Size = UDim2.new(0.35, 0, 0, 52), AnchorPoint = Vector2.new(0, 0), Position = UDim2.new(0.03, 0, 0.18, 0) })
-	statusPanel.BackgroundColor3 = Theme.WithAlpha(Theme.Palette.PanelAlt, 0.7)
-	UIKit.Corner(Theme.Radius.Medium).Parent = statusPanel
+	-- TOP RIGHT — Compact Player Status (small floating pill)
+	local pStatus = UIKit.Frame({ Parent = root, Size = UDim2.new(0.4, 0, 0, 44), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(0.97, 0, 0.04, 0), BackgroundColor3 = Theme.WithAlpha(Theme.Palette.PanelAlt, 0.7) })
+	pStatus.BackgroundTransparency = Theme.Opacity.Soft
+	UIKit.Corner(Theme.Radius.Medium).Parent = pStatus
+	UIKit.Stroke(Theme.Brand.Gold, 0.5, Theme.Opacity.Subtle).Parent = pStatus
 
-	-- Avatar ring
-	local avatarRing = UIKit.Frame({ Parent = statusPanel, Size = UDim2.fromOffset(36, 36), BackgroundColor3 = Theme.Palette.Panel })
-	avatarRing.Position = UDim2.new(0.06, 0, 0.5, 0)
-	avatarRing.AnchorPoint = Vector2.new(0, 0.5)
-	UIKit.Corner(Theme.Radius.Pill).Parent = avatarRing
-	UIKit.Stroke(Theme.MasteryColor("gold"), 1, Theme.Opacity.Subtle).Parent = avatarRing
+	local avatar = UIKit.Frame({ Parent = pStatus, Size = UDim2.fromOffset(32, 32), BackgroundColor3 = Theme.Palette.Panel })
+	avatar.Position = UDim2.new(0.06, 0, 0.5, 0)
+	avatar.AnchorPoint = Vector2.new(0, 0.5)
+	UIKit.Corner(Theme.Radius.Pill).Parent = avatar
 
-	local nameLbl = UIKit.Muted(statusPanel, "Player", UDim2.new(0.55, 0, 0, 20), Theme.Palette.Text)
-	nameLbl.AnchorPoint = Vector2.new(0, 0)
-	nameLbl.Position = UDim2.new(0.28, 0, 0.08, 0)
-	nameLbl.TextScaled = false
-	nameLbl.TextSize = Theme.TypeSize.Tiny
+	local pName = UIKit.Muted(pStatus, "Player", UDim2.new(0.35, 0, 0, 14), Theme.Palette.Text)
+	pName.Position = UDim2.new(0.16, 0, 0.22, 0)
+	pName.TextScaled = false
+	pName.TextSize = Theme.TypeSize.Tiny
 
-	local lvl = UIKit.Title(statusPanel, "1", UDim2.new(0.2, 0, 0, 16), Theme.Brand.Gold)
-	lvl.AnchorPoint = Vector2.new(0, 0)
-	lvl.Position = UDim2.new(0.28, 0, 0.3, 0)
-	lvl.TextScaled = false
-	lvl.TextSize = Theme.TypeSize.Small
+	local pLv = UIKit.Title(pStatus, "L1", UDim2.new(0.2, 0, 0, 14), Theme.Brand.Gold)
+	pLv.Position = UDim2.new(0.16, 0, 0.55, 0)
+	pLv.TextScaled = false
+	pLv.TextSize = Theme.TypeSize.Small
 
-	local coins = UIKit.Muted(statusPanel, "◉ 0", UDim2.new(0.35, 0, 0, 16), Theme.Brand.Gold)
-	coins.AnchorPoint = Vector2.new(0, 0.5)
-	coins.Position = UDim2.new(0.78, 0, 0.5, 0)
-	coins.TextScaled = false
-	coins.TextSize = Theme.TypeSize.Small
+	local pCoins = UIKit.Muted(pStatus, "◉ 0", UDim2.new(0.25, 0, 0, 12), Theme.Brand.Gold)
+	pCoins.Position = UDim2.new(0.72, 0, 0.55, 0)
+	pCoins.TextScaled = false
+	pCoins.TextSize = Theme.TypeSize.Tiny
 
-	-- XP progress (compact strip under status)
-	local xpWrap = UIKit.Frame({ Parent = root, Size = UDim2.new(0.35, 0, 0, 6), AnchorPoint = Vector2.new(0, 0), Position = UDim2.new(0.03, 0, 0.26, 0) })
-	xpWrap.BackgroundTransparency = 1
-	local xpBg = UIKit.Frame({ Parent = xpWrap, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Theme.Palette.Panel })
-	UIKit.Corner(Theme.Radius.Pill).Parent = xpBg
-	local xpFill = UIKit.Frame({ Parent = xpBg, Size = UDim2.new(0.25, 0, 1, 0), BackgroundColor3 = Theme.Brand.Primary })
-	UIKit.Corner(Theme.Radius.Pill).Parent = xpFill
-	self.Store.XpFill = xpFill
+	-- CENTER TOP — SURVIVAL HERO (dominant, fully visible, large)
+	local survZone = UIKit.Frame({ Parent = root, Size = UDim2.new(0.9, 0, 0, 220), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.16, 0) })
+	survZone.BackgroundTransparency = 1
 
-	-- SURVIVAL HERO — large, dominant, floating on the right/center-top
-	local survWrap = UIKit.Frame({ Parent = root, Size = UDim2.new(0.48, 0, 0, 200), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.52, 0, 0.18, 0) })
-	survWrap.BackgroundTransparency = 1
-
-	local survCard = UIKit.Frame({ Parent = survWrap, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(20, 22, 38), BorderSizePixel = 0 })
+	local survCard = UIKit.Frame({ Parent = survZone, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(14, 12, 28), BorderSizePixel = 0 })
 	UIKit.Corner(Theme.Radius.Large).Parent = survCard
 
-	-- Gradient treatment inside survival card (not flat)
+	-- Bright gradient treatment (red-pink to dark — clearly visible)
 	local survGrad = Instance.new("UIGradient")
 	survGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 70, 130)),
-		ColorSequenceKeypoint.new(0.3, Color3.fromRGB(60, 20, 80)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 18, 30)),
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 60, 100)),
+		ColorSequenceKeypoint.new(0.4, Color3.fromRGB(140, 30, 80)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 12, 28)),
 	})
-	survGrad.Rotation = 135
+	survGrad.Rotation = 90
 	survGrad.Parent = survCard
 
 	-- Glowing top edge
-	local survEdge = UIKit.Frame({ Parent = survCard, Size = UDim2.new(1, 0, 0, 3), BackgroundColor3 = Theme.Brand.Accent })
+	local survEdge = UIKit.Frame({ Parent = survCard, Size = UDim2.new(1, 0, 0, 4), BackgroundColor3 = Theme.Brand.Accent })
 	UIKit.Corner(Theme.Radius.Small).Parent = survEdge
 
-	-- Large star icon
-	local survIconWrap = UIKit.Frame({ Parent = survCard, Size = UDim2.fromOffset(70, 70), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0.04, 0, 0.28, 0), BackgroundColor3 = Theme.WithAlpha(Theme.Brand.Accent, 0.15) })
-	UIKit.Corner(Theme.Radius.Large).Parent = survIconWrap
-	UIKit.Stroke(Theme.Brand.Accent, 1, Theme.Opacity.Subtle).Parent = survIconWrap
-	local survIcon = UIKit.Text(survIconWrap, "★", UDim2.fromScale(0.7, 0.7), Theme.Brand.Accent)
-	survIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-	survIcon.Position = UDim2.fromScale(0.5, 0.5)
-	survIcon.TextScaled = false
-	survIcon.TextSize = 36
+	-- Large icon + title area (left side of hero)
+	local heroIconArea = UIKit.Frame({ Parent = survCard, Size = UDim2.fromOffset(72, 72), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0.06, 0, 0.35, 0), BackgroundColor3 = Theme.WithAlpha(Theme.Brand.Accent, 0.2) })
+	UIKit.Corner(Theme.Radius.Large).Parent = heroIconArea
+	UIKit.Stroke(Theme.Brand.Accent, 1, Theme.Opacity.Subtle).Parent = heroIconArea
+	local heroIcon = UIKit.Text(heroIconArea, "★", UDim2.fromScale(0.7, 0.7), Theme.Brand.Accent)
+	heroIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+	heroIcon.Position = UDim2.fromScale(0.5, 0.5)
+	heroIcon.TextScaled = false
+	heroIcon.TextSize = 36
 
-	local survTitle = UIKit.Title(survCard, "SURVIVAL", UDim2.new(0.6, 0, 0, 28), Color3.fromRGB(255, 240, 250))
-	survTitle.AnchorPoint = Vector2.new(0, 0.5)
-	survTitle.Position = UDim2.new(0.22, 0, 0.28, 0)
-	survTitle.TextScaled = false
-	survTitle.TextSize = Theme.TypeSize.Huge
-	survTitle.TextXAlignment = Enum.TextXAlignment.Left
+	local heroTitle = UIKit.Title(survCard, "SURVIVAL", UDim2.new(0.55, 0, 0, 32), Color3.fromRGB(255, 240, 245))
+	heroTitle.AnchorPoint = Vector2.new(0, 0.5)
+	heroTitle.Position = UDim2.new(0.18, 0, 0.28, 0)
+	heroTitle.TextScaled = false
+	heroTitle.TextSize = Theme.TypeSize.Huge
+	heroTitle.Font = Theme.Type.Display
 
-	local survSub = UIKit.Muted(survCard, "4 ROUNDS · 10 PLAYERS · LAST ONE STANDING", UDim2.new(0.6, 0, 0, 14), Color3.fromRGB(220, 210, 230))
-	survSub.AnchorPoint = Vector2.new(0, 0.5)
-	survSub.Position = UDim2.new(0.22, 0, 0.48, 0)
-	survSub.TextScaled = false
-	survSub.TextSize = Theme.TypeSize.Tiny
-	survSub.TextXAlignment = Enum.TextXAlignment.Left
+	local heroSub = UIKit.Muted(survCard, "4 ROUNDS · 10 PLAYERS · LAST ONE STANDING", UDim2.new(0.55, 0, 0, 18), Color3.fromRGB(220, 210, 230))
+	heroSub.AnchorPoint = Vector2.new(0, 0.5)
+	heroSub.Position = UDim2.new(0.18, 0, 0.48, 0)
+	heroSub.TextScaled = false
+	heroSub.TextSize = Theme.TypeSize.Small
 
-	local best = UIKit.Muted(survCard, "WINS: —", UDim2.new(0.6, 0, 0, 14), Theme.Brand.Gold)
-	best.AnchorPoint = Vector2.new(0, 0.5)
-	best.Position = UDim2.new(0.22, 0, 0.65, 0)
-	best.TextScaled = false
-	best.TextSize = Theme.TypeSize.Tiny
-	self.Store.SurvBest = best
+	local heroBest = UIKit.Muted(survCard, "BEST WINS —", UDim2.new(0.55, 0, 0, 14), Theme.Brand.Gold)
+	heroBest.Position = UDim2.new(0.18, 0, 0.65, 0)
+	heroBest.TextScaled = false
+	heroBest.TextSize = Theme.TypeSize.Small
+	self.Store.SurvBest = heroBest
 
-	local survBtn = UIKit.GradientButton(survCard, "JOIN LOBBY", UDim2.new(0.28, 0, 0, 32), Theme.Brand.Accent, { rotation = 0 })
-	survBtn.AnchorPoint = Vector2.new(0.5, 1)
-	survBtn.Position = UDim2.new(0.5, 0, 0.92, 0)
-	survBtn.TextScaled = false
-	survBtn.TextSize = Theme.TypeSize.Small
-	survBtn.Activated:Connect(function()
+	local heroBtn = UIKit.GradientButton(survCard, "JOIN LOBBY", UDim2.new(0.25, 0, 0, 36), Theme.Brand.Accent, { rotation = 0 })
+	heroBtn.AnchorPoint = Vector2.new(0.5, 1)
+	heroBtn.Position = UDim2.new(0.5, 0, 0.92, 0)
+	heroBtn.TextScaled = false
+	heroBtn.TextSize = Theme.TypeSize.Body
+	heroBtn.Activated:Connect(function()
 		AudioService.PlayClick()
 		if Hub.OnAction then Hub.OnAction("Play", { id = "survival", name = "Survival" }) end
 	end)
 
-	-- Four game cards — arranged horizontally with visual identity
-	local cardsWrap = UIKit.Frame({ Parent = root, Size = UDim2.new(1, -32, 0, 110), AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 0.92, 0) })
-	cardsWrap.BackgroundTransparency = 1
+	-- FOUR GAME CARDS — bottom horizontal row, very different from 2x2 grid
+	local cardsZone = UIKit.Frame({ Parent = root, Size = UDim2.new(1, -32, 0, 100), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.78, 0) })
+	cardsZone.BackgroundTransparency = 1
 
-	local cardsLayout = Instance.new("UIGridLayout")
-	cardsLayout.CellSize = UDim2.new(0.23, 0, 1, 0)
-	cardsLayout.CellPadding = UDim2.new(0.015, 0, 0, 0)
-	cardsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	cardsLayout.VerticalAlignment = Enum.VerticalAlignment.Top
-	cardsLayout.FillDirection = Enum.FillDirection.Horizontal
-	cardsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	cardsLayout.Parent = cardsWrap
+	local cards = Instance.new("UIGridLayout")
+	cards.CellSize = UDim2.new(0.23, 0, 1, 0)
+	cards.CellPadding = UDim2.new(0.02, 0, 0, 0)
+	cards.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	cards.VerticalAlignment = Enum.VerticalAlignment.Top
+	cards.SortOrder = Enum.SortOrder.LayoutOrder
+	cards.Parent = cardsZone
 
-	local gameInfo = {
-		{ id = "chaos_run", label = "CHAOS", sub = "Run", accent = Theme.Brand.Primary, icon = "➤" },
-		{ id = "dodge_lab", label = "DODGE", sub = "Lab", accent = Theme.Brand.Danger, icon = "✦" },
-		{ id = "build_blitz", label = "BUILD", sub = "Blitz", accent = Theme.Brand.Warning, icon = "▬" },
-		{ id = "sequence_sprint", label = "SEQ.", sub = "Sprint", accent = Theme.Brand.Secondary, icon = "⧗" },
+	local gameDefs = {
+		{ id = "chaos_run", label = "CHAOS", sub = "RUN", accent = Theme.Brand.Primary, icon = "➤" },
+		{ id = "dodge_lab", label = "DODGE", sub = "LAB", accent = Theme.Brand.Danger, icon = "✦" },
+		{ id = "build_blitz", label = "BUILD", sub = "BLITZ", accent = Theme.Brand.Warning, icon = "▬" },
+		{ id = "sequence_sprint", label = "SEQ.", sub = "SPRINT", accent = Theme.Brand.Secondary, icon = "⧗" },
 	}
-	for order, g in gameInfo do
-		local card = UIKit.Frame({ Parent = cardsWrap, BackgroundColor3 = Theme.Palette.PanelAlt, BorderSizePixel = 0 })
+	for i, g in gameDefs do
+		local card = UIKit.Frame({ Parent = cardsZone, BackgroundColor3 = Theme.Palette.PanelAlt, BorderSizePixel = 0 })
 		UIKit.Corner(Theme.Radius.Medium).Parent = card
 		card.BackgroundTransparency = Theme.Opacity.Card
 
-		-- Small top accent
-		local top = UIKit.Frame({ Parent = card, Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = g.accent })
-		UIKit.Corner(Theme.Radius.Small).Parent = top
+		local bar = UIKit.Frame({ Parent = card, Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = g.accent })
+		UIKit.Corner(Theme.Radius.Small).Parent = bar
 
-		-- Large icon at top
-		local iconWrap = UIKit.Frame({ Parent = card, Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1 })
-		local icon = UIKit.Text(iconWrap, g.icon, UDim2.fromScale(0.8, 1), g.accent)
+		local icon = UIKit.Text(card, g.icon, UDim2.new(1, 0, 0, 28), g.accent)
+		icon.Position = UDim2.new(0, 0, 0, 6)
 		icon.TextScaled = true
-		icon.TextSize = Theme.TypeSize.Hero
-		icon.AnchorPoint = Vector2.new(0.5, 0.5)
-		icon.Position = UDim2.fromScale(0.5, 0.5)
+		icon.TextSize = 26
+		icon.TextXAlignment = Enum.TextXAlignment.Center
 
-		-- Title (bold large)
-		local title = UIKit.Title(card, g.label, UDim2.new(1, -8, 0, 22), Theme.Palette.Text)
-		title.Position = UDim2.new(0, 8, 0.42, 0)
+		local title = UIKit.Title(card, g.label, UDim2.new(1, 0, 0, 20), Theme.Palette.Text)
+		title.Position = UDim2.new(0, 0, 0, 36)
 		title.TextScaled = false
 		title.TextSize = Theme.TypeSize.Header
 		title.TextXAlignment = Enum.TextXAlignment.Center
 
-		-- Subtitle
-		local sub = UIKit.Muted(card, g.sub, UDim2.new(1, -8, 0, 16), Theme.Palette.TextDim)
-		sub.Position = UDim2.new(0, 8, 0.62, 0)
+		local sub = UIKit.Muted(card, g.sub, UDim2.new(1, 0, 0, 14), Theme.Palette.TextDim)
+		sub.Position = UDim2.new(0, 0, 0, 56)
 		sub.TextScaled = false
-		sub.TextSize = Theme.TypeSize.Small
+		sub.TextSize = Theme.TypeSize.Tiny
 		sub.TextXAlignment = Enum.TextXAlignment.Center
 
-		-- Best
-		local best = UIKit.Muted(card, "BEST —", UDim2.new(1, -8, 0, 14), Theme.Palette.TextFaint)
-		best.Position = UDim2.new(0, 8, 0.78, 0)
+		local best = UIKit.Muted(card, "BEST —", UDim2.new(1, 0, 0, 12), Theme.Palette.TextFaint)
+		best.Position = UDim2.new(0, 0, 0, 70)
 		best.TextScaled = false
 		best.TextSize = Theme.TypeSize.Tiny
 		best.TextXAlignment = Enum.TextXAlignment.Center
 		self.Store.Cards = self.Store.Cards or {}
 		self.Store.Cards[g.id] = best
 
-		-- Play button — clean pill at bottom
-		local btn = UIKit.Button(card, "PLAY", UDim2.new(0.84, 0, 0, 26), g.accent, { textColor = Color3.new(1,1,1) })
-		btn.AnchorPoint = Vector2.new(0.5, 1)
-		btn.Position = UDim2.new(0.5, 0, 0.94, 0)
+		local btn = UIKit.Button(card, "PLAY", UDim2.new(0.8, 0, 0, 24), g.accent, { textColor = Color3.new(1,1,1) })
+		btn.Position = UDim2.new(0.1, 0, 0.88, 0)
 		btn.TextScaled = false
 		btn.TextSize = Theme.TypeSize.Small
 		btn.Activated:Connect(function()
 			AudioService.PlayClick()
-			if Hub.OnAction then Hub.OnAction("Play", { id = g.id, name = g.name }) end
+			if Hub.OnAction then Hub.OnAction("Play", { id = g.id, name = g.sub }) end
 		end)
 	end
 
-	self.Store.Cards = {}
+	-- Navigation at very bottom (small, clean)
+	local navWrap = UIKit.Frame({ Parent = root, Size = UDim2.new(1, -32, 0, 32), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.98, 0) })
+	navWrap.BackgroundTransparency = 1
+
+	local navLayout = Instance.new("UIListLayout")
+	navLayout.Padding = UDim.new(0, 6)
+	navLayout.FillDirection = Enum.FillDirection.Horizontal
+	navLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	navLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	navLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	navLayout.Parent = navWrap
+
+	local navItems = {
+		{ id = "Leaderboards", icon = "↺" },
+		{ id = "Profile", icon = "◉" },
+		{ id = "Cosmetics", icon = "◈" },
+		{ id = "Settings", icon = "⚙" },
+	}
+	for j, n in navItems do
+		local b = UIKit.Button(navWrap, n.icon, UDim2.new(0, 36, 1, 0), Theme.Palette.PanelAlt, { textColor = Theme.Palette.TextDim })
+		b.LayoutOrder = j
+		b.TextScaled = false
+		b.TextSize = Theme.TypeSize.Small
+		b.Activated:Connect(function()
+			AudioService.PlayClick()
+			if Hub.OnAction then Hub.OnAction(n.id) end
+		end)
+	end
 end
 
 function Hub:SetProgression(level, xp, xpNext, coins)
-	-- Player status is now in the floating statusPanel; no separate strip needed
+	if not self.Store then return end
 end
 
 function Hub:SetMastery(rank)
-	-- Mastery shown via status indicator or can be added to statusPanel
 end
 
 function Hub:SetRecords(records)
@@ -287,9 +260,7 @@ function Hub:SetRecords(records)
 	records = records or {}
 	for _, g in ({id="chaos_run"},{id="dodge_lab"},{id="build_blitz"},{id="sequence_sprint"}) do
 		local lbl = self.Store.Cards and self.Store.Cards[g.id]
-		if lbl and records[g.id] then
-			lbl.Text = ("BEST %d"):format(records[g.id])
-		end
+		if lbl and records[g.id] then lbl.Text = ("BEST %d"):format(records[g.id]) end
 	end
 end
 

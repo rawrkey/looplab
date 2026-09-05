@@ -67,11 +67,5 @@ for _, child in activitiesFolder:GetChildren() do
 	end
 end
 
--- start light environment art (visual only)
-local envScript = server:FindFirstChild("LabEnvironment")
-if envScript and envScript:IsA("Script") then
-	-- Script runs automatically; no require needed
-end
-
 print("[LOOPLAB] Bootstrap complete. Services started: " .. table.concat(OK, ", "))
 print("[LOOPLAB] Registered activities: " .. table.concat(registry.GetAllIds(), ", "))
