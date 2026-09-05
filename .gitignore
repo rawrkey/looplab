@@ -1,0 +1,11 @@
+# LOOPLAB repository conventions
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+*.rbxlx.bak
+*.rbmx
+*.rbxmx.bak
+Autosave/
+*.log
+.DS_Store

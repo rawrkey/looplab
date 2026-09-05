@@ -1,0 +1,107 @@
+{
+  "name": "LOOPLAB",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "LOOPlab": {
+        "$className": "Folder",
+        "Configuration": {
+          "$className": "Folder",
+          "GameConfig": {
+            "$path": "src/ReplicatedStorage/LOOPlab/Configuration/GameConfig.luau"
+          }
+        },
+        "Shared": {
+          "$className": "Folder",
+          "Types": { "$path": "src/ReplicatedStorage/LOOPlab/Shared/Types.luau" },
+          "ActivityContract": { "$path": "src/ReplicatedStorage/LOOPlab/Shared/ActivityContract.luau" },
+          "ActivityRegistry": { "$path": "src/ReplicatedStorage/LOOPlab/Shared/ActivityRegistry.luau" },
+          "RemoteDefinitions": { "$path": "src/ReplicatedStorage/LOOPlab/Shared/RemoteDefinitions.luau" },
+          "RemoteBuilder": { "$path": "src/ReplicatedStorage/LOOPlab/Shared/RemoteBuilder.luau" }
+        },
+        "Remotes": {
+          "$className": "Folder"
+        }
+      }
+    },
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "LOOPlab": {
+        "$className": "Folder",
+        "Server": {
+          "$className": "Folder",
+          "Bootstrap": { "$path": "src/ServerScriptService/LOOPlab/Server/Bootstrap.server.luau" },
+          "Services": {
+            "$className": "Folder",
+            "AnalyticsService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/AnalyticsService.luau" },
+            "RemoteGuardService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/RemoteGuardService.luau" },
+            "PlayerDataService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/PlayerDataService.luau" },
+            "EconomyService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/EconomyService.luau" },
+            "RewardService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/RewardService.luau" },
+            "ActivityService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/ActivityService.luau" },
+            "QueueService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/QueueService.luau" },
+            "SurvivalMatchService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/SurvivalMatchService.luau" },
+            "SpectatorService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/SpectatorService.luau" },
+            "LeaderboardService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/LeaderboardService.luau" },
+            "DailyChallengeService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/DailyChallengeService.luau" },
+            "CosmeticService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/CosmeticService.luau" },
+            "MonetizationService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/MonetizationService.luau" }
+          },
+          "Activities": {
+            "$className": "Folder",
+            "ChaosRun": { "$path": "src/ServerScriptService/LOOPlab/Server/Activities/ChaosRun.luau" },
+            "DodgeLab": { "$path": "src/ServerScriptService/LOOPlab/Server/Activities/DodgeLab.luau" },
+            "BuildBlitz": { "$path": "src/ServerScriptService/LOOPlab/Server/Activities/BuildBlitz.luau" },
+            "SequenceSprint": { "$path": "src/ServerScriptService/LOOPlab/Server/Activities/SequenceSprint.luau" }
+          }
+        }
+      }
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "LOOPlab": {
+          "$className": "Folder",
+          "Client": {
+            "$className": "Folder",
+            "Bootstrap": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Bootstrap.client.luau" },
+            "Components": {
+              "$className": "Folder",
+              "ViewController": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/ViewController.luau" },
+              "UIKit": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/UIKit.luau" },
+              "Screens": {
+                "$className": "Folder",
+                "Hub": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/Screens/Hub.luau" },
+                "Queue": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/Screens/Queue.luau" },
+                "MatchHud": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/Screens/MatchHud.luau" },
+                "Spectator": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/Screens/Spectator.luau" },
+                "Results": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/Screens/Results.luau" },
+                "Leaderboards": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/Screens/Leaderboards.luau" },
+                "Profile": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/Screens/Profile.luau" },
+                "Settings": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/Screens/Settings.luau" }
+              }
+            },
+            "Controllers": {
+              "$className": "Folder",
+              "HubController": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Controllers/HubController.luau" },
+              "QueueController": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Controllers/QueueController.luau" },
+              "MatchController": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Controllers/MatchController.luau" },
+              "SpectatorController": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Controllers/SpectatorController.luau" },
+              "ProgressionController": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Controllers/ProgressionController.luau" },
+              "LeaderboardController": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Controllers/LeaderboardController.luau" }
+            }
+          }
+        }
+      }
+    },
+    "StarterGui": {
+      "$className": "StarterGui",
+      "LOOPlab": {
+        "$className": "Folder",
+        "UI": { "$className": "Folder" }
+      }
+    }
+  }
+}
