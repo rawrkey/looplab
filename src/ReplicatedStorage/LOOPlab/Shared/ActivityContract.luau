@@ -19,6 +19,11 @@ export type ActivitySession = {
 	-- Implemented by the game:
 	Start: (self: ActivitySession) -> (),
 	Cleanup: (self: ActivitySession) -> (),
+	-- Called by ActivityService when the session timer expires; game MUST compute
+	-- its scoresheet and call OnResult before returning.
+	ForceFinish: (self: ActivitySession) -> (),
+	-- Route a player action from the shared ActivityInput remote (optional).
+	HandleInput: ((self: ActivitySession, player: Player, action: string, data: any) -> ())?,
 	-- Server 'Tick' driven by ActivityService for time-limited games; optional.
 	Tick: ((self: ActivitySession, dt: number) -> ())?,
 }

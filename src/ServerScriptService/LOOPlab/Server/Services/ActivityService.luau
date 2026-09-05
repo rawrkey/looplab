@@ -68,12 +68,18 @@ function ActivityService.CreateSession(activityId: string, mode: string, difficu
 	local started = os.clock()
 	session.Game.Start(session.Game)
 
-	-- Timer: fire Tick requests to the game & auto-end when time is up (games may end earlier via OnResult)
+	-- Timer: fire Tick requests to the game & auto-end when time is up or the
+	-- game reported a result early (via OnResult).
 	task.spawn(function()
-		while _active[sessionId] and session.Result == nil do
+		while _active[sessionId] do
 			task.wait(0.25)
-			if _active[sessionId] and session.Game.Tick then
+			if not _active[sessionId] then break end
+			if session.Game and session.Game.Tick then
 				pcall(session.Game.Tick, session.Game, 0.25)
+			end
+			if session.Result then
+				ActivityService.EndSession(sessionId)
+				break
 			end
 			local elapsed = os.clock() - started
 			if elapsed >= session.Duration then
@@ -92,13 +98,28 @@ function ActivityService.EndSession(sessionId: string)
 	local session = _active[sessionId]
 	if not session then return nil end
 
-	if session.Game and not session.Result then
-		-- force finalize if the game didn't report (call a safe "finish" via Cleanup path)
+	if session.Game then
+		if not session.Result and session.Game.ForceFinish then
+			pcall(session.Game.ForceFinish, session.Game)
+		end
 		pcall(session.Game.Cleanup, session.Game)
-		session.Result = session.Result
+	end
+
+	if not session.Result then
+		-- fallback: never trust a missing report; build a degenerate scoresheet so
+		-- Survival can continue deterministically.
+		local rows = {}
+		for _, p in session.Players do
+			table.insert(rows, { Player = p, Score = 0, Time = os.clock(), Ranks = {} })
+		end
+		session.Result = {
+			ActivityId = session.ActivityId,
+			Mode = session.Mode,
+			Duration = session.Duration,
+			Rows = rows,
+		}
 	end
 	local result = session.Result
-	session.Game.Cleanup(session.Game)
 	_active[sessionId] = nil
 	return result
 end
@@ -112,6 +133,31 @@ end
 
 function ActivityService.IsActive(sessionId)
 	return _active[sessionId] ~= nil
+end
+
+-- Bind the shared ActivityInput remote: routes to whichever active session the
+-- player is in. Games receive (player, action, data) through session.HandleInput.
+local _routed = false
+function ActivityService.Setup()
+	if _routed then return end
+	_routed = true
+	local guard = require(script.Parent.RemoteGuardService)
+	guard.BindEvent(_remotes.Events.ActivityInput, function(player: Player, activityId: any, action: any, data: any)
+		if type(activityId) ~= "string" or type(action) ~= "string" then return end
+		if not guard.Sane(data) then return end
+		for id, session in pairs(_active) do
+			if session.ActivityId == activityId then
+				for _, p in session.Players do
+					if p == player then
+						if session.Game and session.Game.HandleInput then
+							pcall(session.Game.HandleInput, session.Game, player, action, data)
+						end
+						return
+					end
+				end
+			end
+		end
+	end, "ActivityInput")
 end
 
 return ActivityService

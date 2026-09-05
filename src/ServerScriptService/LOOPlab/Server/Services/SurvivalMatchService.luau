@@ -1,6 +1,6 @@
 -- SurvivalMatchService: the flagship LOOPLAB mode.
--- 10-player lobby -> N rounds of elimination down to a winner, using activities.
--- Orchestrates queue->lobby->rounds->winner via ActivityService.
+-- Lobby -> N rounds of elimination down to one winner, using activities.
+-- Orchestrates: pull players from queue -> lobby countdown -> rounds -> winner.
 
 local RunService = game:GetService("RunService")
 if RunService:IsClient() then
@@ -16,15 +16,15 @@ local Analytics = require(script.Parent.AnalyticsService)
 local RewardService = require(script.Parent.RewardService)
 local Spectator = require(script.Parent.SpectatorService)
 local Leaderboard = require(script.Parent.LeaderboardService)
+local PlayerData = require(script.Parent.PlayerDataService)
+local Registry = require(ReplicatedStorage.LOOPlab.Shared.ActivityRegistry)
 
 local Service = {}
 local _remotes = RemoteBuilder.GetAll()
-local Registry = require(ReplicatedStorage.LOOPlab.Shared.ActivityRegistry)
 
-local _match = nil -- { players = {Player}, status = "lobby"|"round"|"results"|"done", round = number, ... }
+local _match = nil -- { players, alive = {uid=true}, status, round, sessionId, eliminationOrder, survivedRounds }
 
--- Which activities are survival-compatible (from registry).
-local function survivalActivities(): { string }
+local function survivalActivityIds(): { string }
 	local ids = {}
 	for id, def in pairs(Registry.List()) do
 		if def.SupportsSurvival then table.insert(ids, id) end
@@ -33,8 +33,8 @@ local function survivalActivities(): { string }
 end
 
 function Service.GetAlivePlayers(): { Player }
-	if not _match then return {} end
 	local out = {}
+	if not _match then return out end
 	for _, p in _match.players do
 		if p.Parent and _match.alive[p.UserId] then
 			table.insert(out, p)
@@ -43,44 +43,53 @@ function Service.GetAlivePlayers(): { Player }
 	return out
 end
 
-function Service.StartMatch(force: boolean): boolean
-	if _match then return false end
-	-- Pull from queue service state.
-	local Queue = require(script.Parent.QueueService)
-	local q = nil -- survival queue is read via QueueService
-	-- We lack a direct handler; instead requeue approach: fetch from queue service.
-
-	-- Actually we get players via queue. For MVP, we pull all queued.
-	-- Standalone survival queue injection is handled by QueueService.StartSurvival calling this.
-	-- It passes players implicitly; we'll read them from the service table.
-	local survivalQueue = require(script.Parent.QueueService)
-	return true
+function Service.IsMatchRunning(): boolean
+	return _match ~= nil and _match.status ~= "done"
 end
 
-function Service.StartSurvivalMatch(players: { Player })
+-- Entry point: called by QueueService when the survival lobby is full/ready.
+function Service.StartSurvivalMatch(players: { Player }): boolean
 	if _match then return false end
 	if #players < GameConfig.Survival.MinFill then
-		for _, p in players do
-			_remotes.Events.Toast:FireClient(p, { message = "Not enough players to start Survival." })
-		end
 		return false
 	end
 
-	match = {
+	_match = {
 		players = players,
 		alive = {},
 		status = "lobby",
 		round = 0,
 		sessionId = tostring(os.time()) .. ":" .. tostring(math.random(1, 99999)),
+		eliminationOrder = {},
+		survivedRounds = {},
 	}
+	for _, p in players do
+		_match.alive[p.UserId] = true
+		_match.survivedRounds[p.UserId] = 0
+	end
 
-	for _, p in players do match.alive[p.UserId] = true end
+	for _, p in players do
+		_remotes.Events.LobbyUpdate:FireClient(p, {
+			Kind = "LobbyUpdate",
+			SessionId = _match.sessionId,
+			Players = #players,
+			Countdown = GameConfig.Survival.LobbyCountdown,
+			Rounds = GameConfig.Survival.Rounds,
+		})
+	end
+
 	Analytics.Fire(players[1], "SurvivalStart", { a = "survival", b = tostring(#players) })
 
-	-- lobby broadcast + countdown handled by QueueService, then rounds.
 	task.spawn(function()
-		task.wait(GameConfig.Survival.LobbyCountdown)
+		-- lobby countdown
+		local t = GameConfig.Survival.LobbyCountdown
+		while t > 0 do
+			task.wait(1)
+			t -= 1
+		end
+		if not _match then return end
 		for round = 1, GameConfig.Survival.Rounds do
+			if not _match or _match.status == "done" then break end
 			local over = Service.RunRound(round)
 			if over then break end
 		end
@@ -89,10 +98,9 @@ function Service.StartSurvivalMatch(players: { Player })
 	return true
 end
 
--- Run a single round. Returns 'over' = true if match finished.
+-- Carry players into the next phase; returns true when the match is finished.
 function Service.RunRound(roundNumber: number): boolean
 	local alive = Service.GetAlivePlayers()
-	if _match.status == "done" then return true end
 	if #alive <= 1 then
 		Service.FinishMatch(alive[1])
 		return true
@@ -101,73 +109,72 @@ function Service.RunRound(roundNumber: number): boolean
 	_match.status = "round"
 	_match.round = roundNumber
 
-	-- Pick a random survival-compatible activity per round.
-	local pool = survivalActivities()
+	local pool = survivalActivityIds()
 	local activityId = pool[math.random(1, #pool)]
 
-	-- Intro broadcast.
 	local introPayload = {
 		Kind = "RoundBegin",
 		Round = roundNumber,
 		TotalRounds = GameConfig.Survival.Rounds,
 		ActivityId = activityId,
 		Count = #alive,
-		Message = ("Round %d / %d"):format(roundNumber, GameConfig.Survival.Rounds),
+		Message = ("Round %d / %d — %s"):format(roundNumber, GameConfig.Survival.Rounds, tostring(Registry.Get(activityId) and Registry.Get(activityId).Name or activityId)),
 	}
 	for _, p in _match.players do
 		_remotes.Events.RoundBegin:FireClient(p, introPayload)
 	end
 
-	-- Create the round session through ActivityService.
 	local res, err = ActivityService.CreateSession(activityId, "Survival", "Normal", alive)
 	if not res then
-		for _, p in alive do
-			_remotes.Events.Toast:FireClient(p, { message = "Round error, skipping." })
-		end
-		-- treat as finished round, no eliminations, continue
+		warn("[Survival] round create failed: " .. tostring(err))
 		return Service.RunRound(roundNumber + 1)
 	end
 
-	-- Wait for completion.
+	-- wait for completion
 	while res.session.Result == nil do
-		task.wait(0.1)
+		task.wait(0.25)
+		if not _match then return true end -- cancelled
 	end
 	local scoresheet = res.session.Result
+	local rows = scoresheet.Rows -- best-first
 
-	-- Compute eliminations: bottom % eliminated via fractions.
-	local survivors = alive
-	local ranked = scoresheet.Rows -- already best-first
-
-	-- Survivor count for next round (nearest integer, min 1).
-	local frac = GameConfig.Survival.SurvivorFractions[roundNumber]
-	local keepCount = frac and math.max(1, math.floor(#survivors * frac + 0.5)) or 1
-	if roundNumber >= GameConfig.Survival.Rounds then
-		keepCount = 1
-	end
+	local n = #rows
+	local frac = GameConfig.Survival.SurvivorFractions[math.min(roundNumber, #GameConfig.Survival.SurvivorFractions)]
+	local keepCount = math.max(1, math.floor(n * frac + 0.5))
+	if roundNumber >= GameConfig.Survival.Rounds then keepCount = 1 end
+	if #alive <= keepCount then keepCount = math.max(1, #alive - 1) end
 
 	local kept = {}
 	local eliminated = {}
-	for i = 1, #ranked do
-		local row = ranked[i]
-		local player = row.Player
-		if player and player.Parent then
-			local uid = player.UserId
-			if i <= keepCount and _match.alive[uid] then
-				kept[#kept + 1] = uid
-			elseif _match.alive[uid] then
-				eliminated[#eliminated + 1] = uid
-				_match.alive[uid] = nil
+	for i, row in rows do
+		local p = row.Player
+		if p and p.Parent and _match.alive[p.UserId] then
+			if i <= keepCount then
+				table.insert(kept, p.UserId)
+				_match.survivedRounds[p.UserId] = (_match.survivedRounds[p.UserId] or 0) + 1
+			else
+				table.insert(eliminated, p.UserId)
 			end
 		end
 	end
 
-	-- Survivor rewards (minimum participation for round win/survive).
-	for _, uid in kept do
-		local player = Players:GetPlayerByUserId(uid)
-		if player then RewardService.GrantSurvivalRound(player, roundNumber, _match.sessionId) end
+	-- apply eliminations
+	for _, uid in eliminated do
+		if _match then
+			_match.alive[uid] = nil
+			table.insert(_match.eliminationOrder, uid)
+		end
+		local p = Players:GetPlayerByUserId(uid)
+		if p then Spectator.Reset(p) end
 	end
 
-	-- Broadcast round-end.
+	-- survived-round participation rewards
+	for _, uid in kept do
+		local p = Players:GetPlayerByUserId(uid)
+		if p then RewardService.GrantSurvivalRound(p, roundNumber, _match.sessionId) end
+	end
+
+	-- broadcast round end
 	local endPayload = {
 		Kind = "RoundEnd",
 		Round = roundNumber,
@@ -180,74 +187,79 @@ function Service.RunRound(roundNumber: number): boolean
 		_remotes.Events.RoundEnd:FireClient(p, endPayload)
 	end
 
-	-- Spectators: eliminated players now spectate.
-	for _, uid in eliminated do
-		local player = Players:GetPlayerByUserId(uid)
-		if player then Spectator.Reset(player) end
-	end
+	task.wait(GameConfig.Survival.RoundTransitionSeconds)
 
 	return #kept <= 1
 end
 
 function Service.FinishMatch(winner: Player?)
+	if not _match then return end
 	local finalAlive = Service.GetAlivePlayers()
-	local winner2 = winner or finalAlive[1]
-	if _match.status == "done" then return end
+	local w = winner or finalAlive[1]
 	_match.status = "done"
 
-	-- Grant rewards to top-3 and update survival stats + leaderboard.
+	-- placements: winner=1, else reverse of elimination order.
+	local placements = {}
+	if w and _match.alive[w.UserId] then
+		placements[w.UserId] = 1
+	end
+	local nextPlace = 2
+	for i = #_match.eliminationOrder, 1, -1 do
+		local uid = _match.eliminationOrder[i]
+		placements[uid] = nextPlace
+		nextPlace += 1
+	end
 	local rows = {}
-	local order = 0
-	for _, pl in _match.players do
-		order += 1
-		local uid = pl.UserId
-		local place = (pl == winner2) and 1 or (order)
-		if _match.alive[uid] then place = 1 end
-		rows[#rows + 1] = { UserId = uid, Name = pl.DisplayName, Place = place }
+	for _, p in _match.players do
+		table.insert(rows, {
+			UserId = p.UserId,
+			Name = p.DisplayName,
+			Place = placements[p.UserId] or 1,
+		})
 	end
+	table.sort(rows, function(a, b) return a.Place < b.Place end)
 
-	for _, pl in _match.players do
-		if _match.alive[pl.UserId] or pl == winner2 then
-			RewardService.GrantSurvivalOutcome(pl, 1, _match.sessionId)
-		else
-			RewardService.GrantSurvivalOutcome(pl, nil, _match.sessionId)
+	-- rewards + stats
+	for _, p in _match.players do
+		local place = placements[p.UserId] or 1
+		local data = PlayerData.GetForPlayer(p)
+		data.Survival.Matches += 1
+		data.Survival.RoundsSurvived += _match.survivedRounds[p.UserId] or 0
+		if place == 1 then
+			data.Survival.Wins += 1
+			RewardService.GrantSurvivalOutcome(p, 1, _match.sessionId)
+		elseif place <= 3 then
+			data.Survival.Podiums += 1
+			RewardService.GrantSurvivalOutcome(p, place, _match.sessionId)
 		end
+		Leaderboard.SubmitSurvival(p)
 	end
 
-	if winner2 then
+	if w then
 		local payload = {
 			Kind = "Winner",
-			WinnerUserId = winner2.UserId,
-			WinnerName = winner2.DisplayName,
+			SessionId = _match.sessionId,
+			WinnerUserId = w.UserId,
+			WinnerName = w.DisplayName,
+			Round = _match.round,
+			TotalRounds = GameConfig.Survival.Rounds,
 			Rows = rows,
 		}
 		for _, p in _match.players do
 			_remotes.Events.Winner:FireClient(p, payload)
 		end
-		Analytics.Fire(winner2, "SurvivalWin", { a = "survival", b = tostring(_match.round) })
+		Analytics.Fire(w, "SurvivalWin", { a = "survival", b = tostring(_match.round) })
 	end
 
-	-- Record survival stat once per player in the match.
-	for _, pl in _match.players do
-		local data = require(script.Parent.PlayerDataService).GetForPlayer(pl)
-		data.Survival.Matches += 1
-		if _match.alive[pl.UserId] then
-			data.Survival.Wins += 1
-		end
-		data.Survival.RoundsSurvived += _match.round or 0
-		Leaderboard.SubmitSurvival(pl)
+	-- persist then release
+	for _, p in _match.players do
+		PlayerData.SavePlayer(p)
 	end
-
-	-- Clear all players from the match so queue can accept new ones.
 	_match = nil
 end
 
 function Service.GetMatch()
 	return _match
-end
-
-function Service.IsMatchRunning(): boolean
-	return _match ~= nil
 end
 
 return Service

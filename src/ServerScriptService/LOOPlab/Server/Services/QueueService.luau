@@ -94,20 +94,47 @@ local function startStandalone(activityId)
 	q.session = res.sessionId
 	Analytics.Fire(players[1], "ActivityStart", { a = activityId, b = "Standalone" })
 
-	-- when the session ends, clear queue + notify players
+	-- when the session ends, settle rewards + notify players
 	task.spawn(function()
-		while res.session.Result == nil do task.wait(0.5) end
+		local deadline = os.clock() + (def.DurationSeconds or 60) + 30
+		while res.session.Result == nil do
+			task.wait(0.5)
+			if os.clock() > deadline then break end
+		end
 		local scoresheet = res.session.Result
-		-- clear the queue and mark done
 		q.session = nil
 		q.players = {}
-		-- results broadcast done by game/survival layer; keep simple: fire Results
+		if not scoresheet then return end
+
+		local RewardService = require(script.Parent.RewardService)
+		local Leaderboard = require(script.Parent.LeaderboardService)
+		local Daily = require(script.Parent.DailyChallengeService)
+		local PlayerData = require(script.Parent.PlayerDataService)
+
+		local rewardsByPlayer = {}
+		-- scoresheet.Rows is best-first; placement = index.
+		for i, row in scoresheet.Rows do
+			local p = row.Player
+			if p and p.Parent then
+				RewardService.GrantStandalone(p, i, #scoresheet.Rows, activityId, row.Score, res.sessionId)
+				Leaderboard.SubmitGameScore(activityId, p, row.Score)
+				Daily.RecordProgress(p, activityId, row.Score)
+				PlayerData.RecordRecent(p, { ActivityId = activityId, Mode = "Standalone", Date = os.date("Y-m-d"), Score = row.Score })
+				local data = require(script.Parent.PlayerDataService).GetForPlayer(p)
+				rewardsByPlayer[p.UserId] = { Coins = data.Coins, Xp = data.Xp }
+			end
+		end
+
 		for _, p in players do
-			_remotes.Events.Results:FireClient(p, {
-				ActivityId = activityId,
-				Rows = scoresheet.Rows,
-				Rewards = { Coins = 0, Xp = 0 },
-			})
+			if p.Parent then
+				local rw = rewardsByPlayer[p.UserId]
+				_remotes.Events.Results:FireClient(p, {
+					ActivityId = activityId,
+					Mode = "Standalone",
+					Rows = scoresheet.Rows,
+					Rewards = rw or { Coins = 0, Xp = 0 },
+				})
+			end
 		end
 	end)
 end
@@ -115,11 +142,12 @@ end
 local function startSurvival()
 	local q = _survivalQueue
 	if q.session or #q.players == 0 then return end
-	-- survival orchestration is handled by SurvivalMatchService; QueueService just reports ready
 	local Survival = require(script.Parent.SurvivalMatchService)
-	local started = Survival.StartMatch(#q.players >= GameConfig.Survival.MinFill)
+	local players = {}
+	for _, p in q.players do table.insert(players, p) end
+	local started = Survival.StartSurvivalMatch(players)
 	if started then
-		q.session = "survival"
+		q.session = true
 		q.players = {}
 	end
 end
@@ -187,14 +215,19 @@ task.spawn(function()
 				end
 			end
 		end
-		-- survival auto-start if min fill reached and timer passed
+		-- survival auto-start: immediate when lobby full, else after fill-wait once min met
 		local q = _survivalQueue
 		if not q.session and #q.players > 0 then
-			if #q.players >= GameConfig.Survival.LobbySize and q.timer == 0 then
-				q.timer = os.clock()
-			end
-			if q.timer ~= 0 and (os.clock() - q.timer) >= 1 then
+			if #q.players >= GameConfig.Survival.LobbySize then
 				startSurvival()
+				q.timer = 0
+			elseif #q.players >= GameConfig.Survival.MinFill then
+				if q.timer == 0 then q.timer = os.clock() end
+				if (os.clock() - q.timer) >= GameConfig.Survival.FillWaitSeconds then
+					startSurvival()
+					q.timer = 0
+				end
+			else
 				q.timer = 0
 			end
 		end

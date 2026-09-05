@@ -82,7 +82,7 @@ local GameConfig = {
 		Rounds = 4,
 		-- Fraction of roster that survives each round, applied to live player count.
 		-- For 10 players this maps to 10->8->5->3->1 (exact after rounding to nearest/tie rules).
-		SurvivorFractions = { 0.8, 0.62, 0.6, 1.0 }, -- final round => winner = 1 (handled separately)
+		SurvivorFractions = { 0.8, 0.625, 0.6, 1.0 }, -- 10->8->5->3->1 for a full lobby
 		RoundTransitionSeconds = 8, -- between rounds (announcements / spectate)
 		RoundIntroSeconds = 5,
 		MaxMatchDurationMinutes = 40,
