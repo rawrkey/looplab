@@ -15,6 +15,7 @@ local Economy = require(script.Parent.EconomyService)
 local Poll = {}
 local _remotes = RemoteBuilder.GetAll()
 local _toasts = {}
+local _fx = {}
 
 function Poll.TrackToast(player, message)
 	if not player then return end
@@ -27,13 +28,27 @@ function Poll.TrackToast(player, message)
 	if #t > 5 then table.remove(t, 1) end
 end
 
+function Poll.TrackFx(player, entry)
+	if not player then return end
+	local t = _fx[player.UserId]
+	if not t then
+		t = {}
+		_fx[player.UserId] = t
+	end
+	table.insert(t, entry)
+	if #t > 12 then table.remove(t, 1) end
+end
+
 local function economyFor(player)
 	local data = PlayerData.GetForPlayer(player)
 	if not data then return nil end
+	local Progression = require(script.Parent.ProgressionService)
 	return {
 		Coins = data.Coins,
 		Xp = data.Xp,
 		Level = Economy.GetLevelFromXp(data.Xp),
+		MasteryXp = data.MasteryXp or 0,
+		MasteryRank = Progression.GetMasteryRank(data.MasteryXp or 0),
 	}
 end
 
@@ -55,10 +70,20 @@ function Poll.Setup()
 	guard.BindFunction(_remotes.Functions.PollActivity, function(player)
 		local toasts = _toasts[player.UserId]
 		_toasts[player.UserId] = nil
+		local fx = _fx[player.UserId]
+		_fx[player.UserId] = nil
+		local daily = pcall(require, script.Parent.DailyChallengeService)
+		local dailyState = nil
+		if daily then
+			local ok2, ds = pcall(function() return daily.GetState(player) end)
+			if ok2 and ds then dailyState = ds end
+		end
 		return {
 			Activity = activityFor(player),
 			Economy = economyFor(player),
 			Toasts = toasts,
+			Fx = fx,
+			Daily = dailyState,
 		}
 	end, "PollActivity")
 end

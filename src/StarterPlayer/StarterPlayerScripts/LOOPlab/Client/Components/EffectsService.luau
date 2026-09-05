@@ -1,5 +1,6 @@
 -- EffectsService: screen-level feedback layer. Toasts, countdowns, banners,
--- round transitions, elimination flashes, victory celebration.
+-- round transitions, elimination flashes, victory celebration, and the new
+-- progression moments (LevelUp, BadgeReveal, TitleReveal, MasteryUp, PersonalBest).
 -- Uses a single ScreenGui overlay so gameplay UI stays clean.
 
 local Players = game:GetService("Players")
@@ -8,8 +9,10 @@ local RunService = game:GetService("RunService")
 if RunService:IsServer() then return {} end
 
 local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+local AudioService = require(script.Parent.AudioService)
 
 local Theme = require(script.Parent.Theme)
+local UIKit = require(script.Parent.UIKit)
 
 local EffectsService = {}
 
@@ -145,7 +148,7 @@ function EffectsService.EliminateFlash(accent: Color3?)
 end
 
 function EffectsService.RoundBanner(round: number, total: number, activityName: string, accent: Color3?)
-	EffectsService.Banner(("ROUND %d"):format(round, total), activityName, accent or Theme.Brand.Primary)
+	EffectsService.Banner(("ROUND %d"):format(round), activityName, accent or Theme.Brand.Primary)
 end
 
 function EffectsService.Victory(winnerName: string, accent: Color3?)
@@ -180,6 +183,122 @@ function EffectsService.HoldLayer(skipTransparency: boolean)
 	layer.AnchorPoint = Vector2.zero
 	layer.BackgroundTransparency = 0.3
 	if skipTransparency then layer.BackgroundTransparency = 1 end
+	return layer
+end
+
+-- ========== NEW PROGRESSION PRESENTATIONS ==========
+
+local function revealCard(title, sub, icon, accent)
+	accent = accent or Theme.Brand.Primary
+	local layer = panel(ScreenGui, UDim2.new(0.56, 0, 0.3, 0), Color3.fromRGB(8, 10, 18), UDim2.fromScale(0.5, 0.5))
+	layer.BackgroundTransparency = 0.1
+	UIKit.Corner(Theme.Radius.Medium).Parent = layer
+
+	local line = Instance.new("Frame")
+	line.Size = UDim2.new(1, 0, 0, 3)
+	line.AnchorPoint = Vector2.new(0, 0)
+	line.BackgroundColor3 = accent
+	line.BorderSizePixel = 0
+	line.Parent = layer
+
+	local iconLbl = label(layer, icon or "✦", UDim2.new(1, 0, 0.4, 0), accent, Theme.Type.Title)
+	iconLbl.Position = UDim2.new(0.5, 0, 0.28, 0)
+	iconLbl.TextSize = 48
+
+	local t = label(layer, title, UDim2.new(0.96, 0, 0.2, 0), Theme.Palette.Text, Theme.Type.Header)
+	t.Position = UDim2.new(0.5, 0, 0.66, 0)
+	t.TextScaled = false
+	t.TextSize = Theme.TypeSize.Huge
+	t.TextTransparency = 1
+
+	local s
+	if sub then
+		s = label(layer, sub, UDim2.new(0.96, 0, 0.12, 0), Theme.Palette.TextDim, Theme.Type.Body)
+		s.Position = UDim2.new(0.5, 0, 0.84, 0)
+		s.TextScaled = false
+		s.TextSize = Theme.TypeSize.Body
+		s.TextTransparency = 1
+	end
+
+	layer.BackgroundTransparency = 1
+	layer.Size = UDim2.new(0.56, 0, 0.16, 0)
+	TweenService:Create(layer, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 0.1,
+		Size = UDim2.new(0.56, 0, 0.3, 0),
+	}):Play()
+	TweenService:Create(t, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
+	if s then
+		TweenService:Create(s, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
+	end
+	task.delay(2.2, function()
+		TweenService:Create(layer, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 1, Size = UDim2.new(0.56, 0, 0.16, 0) }):Play()
+		task.delay(0.4, function() layer:Destroy() end)
+	end)
+	return layer
+end
+
+function EffectsService.LevelUp(payload)
+	payload = payload or {}
+	local level = payload.Level or 1
+	local coins = payload.Coins or 0
+	revealCard(("LEVEL %d"):format(level), ("+%d Coins"):format(coins), "▲", Theme.Brand.Success)
+	AudioService.PlayLevelUp()
+end
+
+function EffectsService.BadgeReveal(badge)
+	if not badge then return end
+	revealCard(badge.Name or "BADGE", badge.Desc or "Achievement unlocked", badge.Icon or "✦", Theme.Brand.Gold)
+	AudioService.PlayBadge()
+end
+
+function EffectsService.TitleReveal(title)
+	if not title then return end
+	revealCard(("TITLE: %s"):format(title.Name or "New Title"), "Equip it from your Profile", "♛", Theme.Accent("survival"))
+	AudioService.PlayTitle()
+end
+
+function EffectsService.MasteryUp(rank)
+	rank = rank or { Display = "BRONZE" }
+	local color = Theme.MasteryColor(rank.Id or "bronze")
+	revealCard(("MASTERY RANK UP: %s"):format(rank.Display or rank.Id), "Your legend grows", "◆", color)
+	AudioService.PlayMastery()
+end
+
+function EffectsService.PersonalBest(score)
+	revealCard(("PERSONAL BEST!  %d"):format(score or 0), "New record", "⚑", Theme.Brand.Primary)
+	AudioService.PlayPersonalBest()
+end
+
+function EffectsService.Final3()
+	EffectsService.Banner("FINAL 3", "Survive to the end", Theme.Accent("survival"))
+	AudioService.PlayFinal3()
+end
+
+function EffectsService.Final2()
+	EffectsService.Banner("FINAL 2", "One more to win it all", Theme.Accent("survival"))
+	AudioService.PlayFinal2()
+end
+
+function EffectsService.RewardReveal(xp, coins, extra)
+	local layer = panel(ScreenGui, UDim2.new(0.5, 0, 0.16, 0), Color3.fromRGB(8, 10, 18), UDim2.fromScale(0.5, 0.78))
+	layer.BackgroundTransparency = 0.1
+	UIKit.Corner(Theme.Radius.Medium).Parent = layer
+	local txt = label(layer, ("+%d XP   +%d Coins"):format(xp or 0, coins or 0), UDim2.fromScale(1, 1), Theme.Brand.Gold, Theme.Type.Header)
+	txt.TextScaled = false
+	txt.TextSize = Theme.TypeSize.Header
+	if extra then
+		local sub = label(layer, extra, UDim2.fromScale(1, 0.4), Theme.Palette.TextDim, Theme.Type.Body)
+		sub.Position = UDim2.new(0.5, 0, 0.74, 0)
+		sub.TextScaled = false
+		sub.TextSize = Theme.TypeSize.Small
+	end
+	layer.BackgroundTransparency = 1
+	TweenService:Create(layer, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { BackgroundTransparency = 0.1 }):Play()
+	AudioService.PlayRewardReveal()
+	task.delay(2.4, function()
+		TweenService:Create(layer, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 1 }):Play()
+		task.delay(0.4, function() layer:Destroy() end)
+	end)
 	return layer
 end
 

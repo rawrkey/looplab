@@ -49,6 +49,7 @@ startService("CosmeticService")
 startService("MonetizationService")
 startService("LeaderboardService")
 startService("DailyChallengeService")
+startService("ProgressionService")
 
 -- 3. gameplay orchestration
 startService("ActivityService")

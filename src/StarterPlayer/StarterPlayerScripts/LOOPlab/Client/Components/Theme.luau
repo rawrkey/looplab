@@ -26,6 +26,27 @@ Theme.Palette = {
 	Scrim = Color3.fromRGB(0, 0, 0),
 }
 
+Theme.Opacity = {
+	Solid = 0,
+	Panel = 0.05,
+	Glow = 0.15,
+	Soft = 0.3,
+	Dim = 0.5,
+	Scrim = 0.72,
+}
+
+Theme.Border = {
+	Width = 1,
+	Subtle = 0.35,
+	Std = 0.55,
+	Strong = 0.9,
+}
+
+Theme.Shadow = {
+	Offset = Vector2.new(0, 3),
+	Transparency = 0.6,
+}
+
 Theme.Type = {
 	Title = Enum.Font.GothamBlack,
 	Header = Enum.Font.GothamBold,
@@ -63,6 +84,8 @@ Theme.Motion = {
 Theme.MotionEaseIn = Enum.EasingStyle.Quad
 Theme.MotionEaseOut = Enum.EasingStyle.Quad
 Theme.MotionEase = Enum.EasingStyle.Quart
+Theme.MotionBounce = Enum.EasingStyle.Back
+Theme.MotionSnap = Enum.EasingStyle.Elastic
 
 -- Per-activity accent for unique-but-on-brand identity.
 Theme.ActivityAccents = {
@@ -73,8 +96,20 @@ Theme.ActivityAccents = {
 	survival = Color3.fromRGB(255, 76, 152),
 }
 
+Theme.MasteryColors = {
+	bronze = Color3.fromRGB(176, 141, 87),
+	silver = Color3.fromRGB(196, 204, 216),
+	gold = Color3.fromRGB(255, 214, 90),
+	platinum = Color3.fromRGB(126, 224, 214),
+	diamond = Color3.fromRGB(120, 190, 255),
+}
+
 function Theme.Accent(id: string): Color3
 	return Theme.ActivityAccents[id] or Theme.Brand.Primary
+end
+
+function Theme.MasteryColor(id: string): Color3
+	return Theme.MasteryColors[id] or Theme.Brand.Primary
 end
 
 function Theme.WithAlpha(color: Color3, alpha: number): Color3
@@ -83,6 +118,31 @@ function Theme.WithAlpha(color: Color3, alpha: number): Color3
 		math.floor(color.G * 255 * alpha + 15 * (1 - alpha)),
 		math.floor(color.B * 255 * alpha + 26 * (1 - alpha))
 	)
+end
+
+function Theme.Darken(color: Color3, amount: number): Color3
+	amount = math.clamp(amount or 0.15, 0, 1)
+	return Color3.fromRGB(
+		math.floor(color.R * 255 * (1 - amount)),
+		math.floor(color.G * 255 * (1 - amount)),
+		math.floor(color.B * 255 * (1 - amount))
+	)
+end
+
+function Theme.Lerp(a: Color3, b: Color3, t: number): Color3
+	t = math.clamp(t or 0, 0, 1)
+	return Color3.fromRGB(
+		math.floor(a.R * 255 + (b.R - a.R) * 255 * t),
+		math.floor(a.G * 255 + (b.G - a.G) * 255 * t),
+		math.floor(a.B * 255 + (b.B - a.B) * 255 * t)
+	)
+end
+
+function Theme.PodiumColor(place: number): Color3
+	if place == 1 then return Theme.Brand.Gold end
+	if place == 2 then return Color3.fromRGB(200, 210, 225) end
+	if place == 3 then return Color3.fromRGB(210, 140, 90) end
+	return Theme.Palette.TextDim
 end
 
 return Theme

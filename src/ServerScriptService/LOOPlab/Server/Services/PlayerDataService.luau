@@ -27,7 +27,15 @@ local function defaultData()
 		OwnedCosmetics = {},
 		Equipped = {},
 		Games = {},
-		Survival = { Wins = 0, Podiums = 0, RoundsSurvived = 0, BestPlacement = 0, Matches = 0 },
+		Survival = {
+			Wins = 0, Podiums = 0, RoundsSurvived = 0, BestPlacement = 0, Matches = 0,
+			WinStreak = 0, BestWinStreak = 0, FinalRoundAppearances = 0, LastWinDate = "",
+		},
+		MasteryXp = 0,
+		Badges = {},
+		Titles = {},
+		EquippedTitle = "",
+		Records = {},
 		Daily = { Date = "", Claimed = false, Progress = 0 },
 		Recent = {},
 		Settings = {},
@@ -49,6 +57,17 @@ local function migrate(raw: table): table
 	if type(d.Equipped) ~= "table" then d.Equipped = {} end
 	if type(d.Games) ~= "table" then d.Games = {} end
 	if type(d.Recent) ~= "table" then d.Recent = {} end
+	if type(d.Survival) ~= "table" then d.Survival = defaultData().Survival end
+	if not d.Survival.WinStreak then d.Survival.WinStreak = 0 end
+	if not d.Survival.BestWinStreak then d.Survival.BestWinStreak = 0 end
+	if not d.Survival.FinalRoundAppearances then d.Survival.FinalRoundAppearances = 0 end
+	if not d.Survival.LastWinDate then d.Survival.LastWinDate = "" end
+	if type(d.MasteryXp) ~= "number" then d.MasteryXp = 0 end
+	if type(d.Badges) ~= "table" then d.Badges = {} end
+	if type(d.Titles) ~= "table" then d.Titles = {} end
+	if type(d.EquippedTitle) ~= "string" then d.EquippedTitle = "" end
+	if type(d.Records) ~= "table" then d.Records = {} end
+	d.SchemaVersion = GameConfig.SchemaVersion
 	return d
 end
 
@@ -155,8 +174,13 @@ function Service.Setup()
 		local data = Service.GetForPlayer(player)
 		local economy = require(script.Parent.EconomyService)
 		local daily = require(script.Parent.DailyChallengeService)
+		local progression = require(script.Parent.ProgressionService)
 		local owned = {}
 		for k in data.OwnedCosmetics do table.insert(owned, k) end
+		local badges = {}
+		for k in data.Badges do table.insert(badges, k) end
+		local titles = {}
+		for k in data.Titles do table.insert(titles, k) end
 		return {
 			Level = economy.GetLevelFromXp(data.Xp),
 			Xp = data.Xp,
@@ -167,6 +191,12 @@ function Service.Setup()
 			Equipped = data.Equipped,
 			OwnedCosmetics = owned,
 			Settings = data.Settings,
+			MasteryXp = data.MasteryXp,
+			MasteryRank = progression.GetMasteryRank(data.MasteryXp),
+			Badges = badges,
+			Titles = titles,
+			EquippedTitle = data.EquippedTitle,
+			Records = data.Records,
 		}
 	end, "ProfileFetch")
 end

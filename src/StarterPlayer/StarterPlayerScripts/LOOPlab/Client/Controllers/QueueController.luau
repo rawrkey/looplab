@@ -13,6 +13,7 @@ local Theme = require(script.Parent.Parent.Components.Theme)
 local QueueController = {}
 
 local QueueScreen
+QueueController.ResultsDismissed = false
 
 function QueueController.Init(screens)
 	QueueScreen = screens.Queue
@@ -57,12 +58,27 @@ function QueueController.QueueUpdate(payload)
 	})
 end
 
+function QueueController.DismissResults()
+	QueueController.ResultsDismissed = true
+end
+
 function QueueController.Results(payload)
-	if not payload then return end
-	ViewController.Show("Results", {
-		Rows = payload.Rows,
-		Rewards = payload.Rewards,
-	})
+	if not payload or QueueController.ResultsDismissed then return end
+	if ViewController.GetCurrentName() ~= "Results" then
+		ViewController.Show("Results", {
+			Rows = payload.Rows,
+			Rewards = payload.Rewards,
+		})
+		return
+	end
+	-- Already showing: refresh in place so late-arriving reward payloads render.
+	pcall(function()
+		local Results = require(script.Parent.Parent.Components.Screens.Results)
+		Results:SetResults({
+			Rows = payload.Rows,
+			Rewards = payload.Rewards,
+		})
+	end)
 end
 
 function QueueController.Toast(message, opts)

@@ -15,15 +15,12 @@ local Rewards = {}
 local _remotes = RemoteBuilder.GetAll()
 local _grantedKeys = {}
 
-function Rewards.Grant(player: Player, amounts: { Xp: number?, Coins: number?, UnlockCosmetic: string? }, reason: string, dedupeKey: string)
-	if not player then return end
+local function _applyGranted(player, amounts, reason, dedupeKey)
 	local key = player.UserId .. "|" .. reason .. "|" .. (dedupeKey or "none")
 	if _grantedKeys[key] then
-		warn("[Rewards] duplicate grant prevented: " .. key)
-		return
+		return nil
 	end
 	_grantedKeys[key] = true
-
 	if amounts.UnlockCosmetic then
 		local data = PlayerData.GetForPlayer(player)
 		if not data.OwnedCosmetics[amounts.UnlockCosmetic] then
@@ -36,10 +33,17 @@ function Rewards.Grant(player: Player, amounts: { Xp: number?, Coins: number?, U
 	if (amounts.Xp or 0) > 0 then
 		Economy.AddXp(player, amounts.Xp)
 	end
+	return amounts
+end
 
-	_remotes.Events.Toast:FireClient(player, { message = ("+%s XP  +%s Coins"):format(tostring(amounts.Xp or 0), tostring(amounts.Coins or 0)) })
-	Poll.TrackToast(player, ("+%s XP  +%s Coins"):format(tostring(amounts.Xp or 0), tostring(amounts.Coins or 0)))
+function Rewards.Grant(player: Player, amounts: { Xp: number?, Coins: number?, UnlockCosmetic: string? }, reason: string, dedupeKey: string): table?
+	local granted = _applyGranted(player, amounts, reason, dedupeKey)
+	if not granted then return nil end
+	local message = ("+%s XP  +%s Coins"):format(tostring(amounts.Xp or 0), tostring(amounts.Coins or 0))
+	_remotes.Events.Toast:FireClient(player, { message = message })
+	Poll.TrackToast(player, message)
 	Analytics.Fire(player, "RewardGranted", { a = reason, b = tostring(amounts.Coins or 0) .. ":" .. tostring(amounts.Xp or 0) })
+	return { Xp = amounts.Xp or 0, Coins = amounts.Coins or 0 }
 end
 
 function Rewards.GrantStandalone(player: Player, placement: number, totalPlayers: number, activityId: string, score: number, sessionId: string)
@@ -50,7 +54,7 @@ function Rewards.GrantStandalone(player: Player, placement: number, totalPlayers
 	end
 	local coins = math.floor(r.BaseCoins * mult)
 	local xp = math.floor(r.BaseXp * mult)
-	Rewards.Grant(player, { Coins = coins, Xp = xp }, "standalone_" .. activityId, sessionId .. ":" .. placement)
+	local granted = Rewards.Grant(player, { Coins = coins, Xp = xp }, "standalone_" .. activityId, sessionId .. ":" .. placement)
 	local data = PlayerData.GetForPlayer(player)
 	local entry = data.Games[activityId]
 	if not entry then
@@ -60,6 +64,7 @@ function Rewards.GrantStandalone(player: Player, placement: number, totalPlayers
 	entry.Plays += 1
 	if score > entry.BestScore then entry.BestScore = score end
 	if placement == 1 then entry.Wins += 1 end
+	return granted
 end
 
 function Rewards.GrantSurvivalRound(player: Player, roundIndex: number, sessionId: string)

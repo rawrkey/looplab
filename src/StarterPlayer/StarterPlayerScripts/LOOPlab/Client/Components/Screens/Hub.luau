@@ -1,7 +1,9 @@
 -- Hub: LOOPLAB command center. Activity cards, survival flagship, sub-entries.
+-- Shows live level/mastery/coins and per-activity best records.
 
 local UIKit = require(script.Parent.Parent.UIKit)
 local Theme = require(script.Parent.Parent.Theme)
+local AudioService = require(script.Parent.Parent.AudioService)
 
 local Hub = {
 	Name = "Hub",
@@ -34,7 +36,7 @@ function Hub:Build(parent)
 		BackgroundTransparency = 1,
 	})
 	self.Root = root
-	self.Store = {}
+	self.Store = { Cards = {} }
 
 	local bgGlow = UIKit.Frame({ Parent = root, Size = UDim2.fromScale(1, 1) })
 	bgGlow.BackgroundColor3 = Theme.Palette.Background
@@ -52,31 +54,34 @@ function Hub:Build(parent)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
 	self.Panel = panel
 
-	local logo = UIKit.Title(panel, "LOOPLAB", UDim2.new(1, 0, 0, 64), Theme.Brand.Primary)
+	local logo = UIKit.Title(panel, "LOOPLAB", UDim2.new(1, 0, 0, 56), Theme.Brand.Primary)
 	logo.TextScaled = false
 	logo.TextSize = Theme.TypeSize.Hero
-	local tagline = UIKit.Text(panel, "Test yourself. Survive the Lab.", UDim2.new(1, 0, 0, 28), Theme.Palette.TextDim)
-	tagline.Position = UDim2.new(0, 0, 0, 64)
+	local tagline = UIKit.Text(panel, "Test yourself. Survive the Lab.", UDim2.new(1, 0, 0, 24), Theme.Palette.TextDim)
+	tagline.TextScaled = false
+	tagline.TextSize = Theme.TypeSize.Small
+	tagline.Position = UDim2.new(0, 0, 0, 58)
 
-	local strip = UIKit.Frame({ Parent = panel, Size = UDim2.new(1, -40, 0, 34), Position = UDim2.new(0, 20, 0, 100) })
+	-- top stat strip: level | mastery | coins
+	local strip = UIKit.Frame({ Parent = panel, Size = UDim2.new(1, -40, 0, 40), Position = UDim2.new(0, 20, 0, 92) })
 	strip.BackgroundTransparency = 1
-	local levelLbl = UIKit.Text(strip, "Level 1", UDim2.new(0.32, 0, 1, 0), Theme.Brand.Gold)
-	local xpLbl = UIKit.Text(strip, "0/100 XP", UDim2.new(0.34, 0, 1, 0), Theme.Palette.TextDim)
-	xpLbl.Position = UDim2.new(0.32, 0, 0, 0)
-	local coinLbl = UIKit.Text(strip, "0 Coins", UDim2.new(0.34, 0, 1, 0), Theme.Brand.Gold)
-	coinLbl.Position = UDim2.new(0.66, 0, 0, 0)
+	local levelLbl = UIKit.Text(strip, "Level 1", UDim2.new(0.3, 0, 1, 0), Theme.Brand.Gold)
+	local masteryLbl = UIKit.Text(strip, "BRONZE", UDim2.new(0.24, 0, 1, 0), Theme.MasteryColor("bronze"))
+	masteryLbl.Position = UDim2.new(0.3, 0, 0, 0)
+	local coinLbl = UIKit.Text(strip, "0 Coins", UDim2.new(0.24, 0, 1, 0), Theme.Brand.Gold)
+	coinLbl.Position = UDim2.new(0.54, 0, 0, 0)
 	self.Store.Level = levelLbl
-	self.Store.Xp = xpLbl
+	self.Store.Mastery = masteryLbl
 	self.Store.Coins = coinLbl
 
-	local xpBar = UIKit.Frame({ Parent = panel, Size = UDim2.new(1, -80, 0, 8), Position = UDim2.new(0, 40, 0, 140) })
+	local xpBar = UIKit.Frame({ Parent = panel, Size = UDim2.new(1, -80, 0, 10), Position = UDim2.new(0, 40, 0, 138) })
 	xpBar.BackgroundColor3 = Theme.Palette.Background
 	UIKit.Corner(Theme.Radius.Pill).Parent = xpBar
 	local xpFill = UIKit.Frame({ Parent = xpBar, Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = Theme.Brand.Primary })
 	UIKit.Corner(Theme.Radius.Pill).Parent = xpFill
 	self.Store.XpBar = xpFill
 
-	local gridWrap = UIKit.Frame({ Parent = panel, Size = UDim2.new(1, -48, 0, 300), Position = UDim2.new(0, 24, 0, 165) })
+	local gridWrap = UIKit.Frame({ Parent = panel, Size = UDim2.new(1, -48, 0, 292), Position = UDim2.new(0, 24, 0, 162) })
 	gridWrap.BackgroundTransparency = 1
 	local grid = Instance.new("UIGridLayout")
 	grid.Parent = gridWrap
@@ -92,25 +97,31 @@ function Hub:Build(parent)
 		card.LayoutOrder = cfg.order or 0
 		local accentLine = UIKit.Frame({ Parent = card, Size = UDim2.new(1, 0, 0, 5), BackgroundColor3 = cfg.accent })
 		UIKit.Corner(Theme.Radius.Small).Parent = accentLine
-		local icon = UIKit.Text(card, cfg.icon, UDim2.new(1, 0, 0, 40), cfg.accent)
+		local icon = UIKit.Text(card, cfg.icon, UDim2.new(1, 0, 0, 36), cfg.accent)
 		icon.Position = UDim2.new(0, 0, 0, 8)
 		icon.TextSize = 24
 		icon.TextScaled = false
-		local name = UIKit.Title(card, cfg.name, UDim2.new(1, 0, 0, 30), Theme.Palette.Text)
+		local name = UIKit.Title(card, cfg.name, UDim2.new(1, 0, 0, 28), Theme.Palette.Text)
 		name.TextScaled = false
 		name.TextSize = Theme.TypeSize.Header
-		name.Position = UDim2.new(0, 0, 0, 48)
-		local desc = UIKit.Text(card, cfg.desc, UDim2.new(1, 0, 0, 22), Theme.Palette.TextDim)
+		name.Position = UDim2.new(0, 0, 0, 46)
+		local desc = UIKit.Text(card, cfg.desc, UDim2.new(1, 0, 0, 20), Theme.Palette.TextDim)
 		desc.TextScaled = false
 		desc.TextSize = Theme.TypeSize.Small
-		desc.Position = UDim2.new(0, 0, 0, 80)
+		desc.Position = UDim2.new(0, 0, 0, 74)
+		local best = UIKit.Text(card, "Best: —", UDim2.new(1, 0, 0, 18), Theme.Palette.TextFaint)
+		best.TextScaled = false
+		best.TextSize = Theme.TypeSize.Tiny
+		best.Position = UDim2.new(0, 0, 0, 96)
+		self.Store.Cards[cfg.id] = best
 
-		local btn = UIKit.GradientButton(card, "PLAY", UDim2.new(0.8, 0, 0, 36), cfg.accent)
+		local btn = UIKit.GradientButton(card, "PLAY", UDim2.new(0.84, 0, 0, 32), cfg.accent)
 		btn.AnchorPoint = Vector2.new(0.5, 1)
-		btn.Position = UDim2.new(0.5, 0, 1, -10)
+		btn.Position = UDim2.new(0.5, 0, 1, -8)
 		btn.TextScaled = false
 		btn.TextSize = Theme.TypeSize.Body
 		btn.Activated:Connect(function()
+			AudioService.PlayClick()
 			if Hub.OnAction then Hub.OnAction("Play", cfg) end
 		end)
 		return card
@@ -138,24 +149,31 @@ function Hub:Build(parent)
 	survDesc.TextScaled = false
 	survDesc.TextSize = Theme.TypeSize.Body
 	survDesc.Position = UDim2.new(0, 0, 0, 56)
-	local survBtn = UIKit.GradientButton(survCard, "JOIN LOBBY", UDim2.new(0.86, 0, 0, 40), Theme.Accent("survival"))
+	local survBest = UIKit.Text(survCard, "Best win: —", UDim2.new(1, 0, 0, 18), Color3.fromRGB(255, 220, 220))
+	survBest.TextScaled = false
+	survBest.TextSize = Theme.TypeSize.Tiny
+	survBest.Position = UDim2.new(0, 0, 0, 92)
+	local survBtn = UIKit.GradientButton(survCard, "JOIN LOBBY", UDim2.new(0.88, 0, 0, 34), Theme.Accent("survival"))
 	survBtn.AnchorPoint = Vector2.new(0.5, 1)
-	survBtn.Position = UDim2.new(0.5, 0, 1, -10)
+	survBtn.Position = UDim2.new(0.5, 0, 1, -8)
 	survBtn.TextScaled = false
 	survBtn.TextSize = Theme.TypeSize.Body
 	survBtn.Activated:Connect(function()
+		AudioService.PlayClick()
 		if Hub.OnAction then Hub.OnAction("Play", { id = "survival", name = "Survival" }) end
 	end)
+	self.Store.SurvBest = survBest
 
-	local footer = UIKit.Frame({ Parent = panel, Size = UDim2.new(1, -40, 0, 44), Position = UDim2.new(0, 20, 0, 482) })
+	local footer = UIKit.Frame({ Parent = panel, Size = UDim2.new(1, -40, 0, 44), Position = UDim2.new(0, 20, 0, 470) })
 	footer.BackgroundTransparency = 1
-	local navs = { { "Leaderboards", "↺" }, { "Profile", "◉" }, { "Settings", "⚙" } }
+	local navs = { { "Leaderboards", "↺" }, { "Profile", "◉" }, { "Cosmetics", "◈" }, { "Settings", "⚙" } }
 	for i, nav in navs do
-		local b = UIKit.Button(footer, nav[2] .. "  " .. nav[1], UDim2.new(0.3, 0, 1, 0), Theme.Palette.Panel, { textColor = Theme.Palette.Text })
-		b.Position = UDim2.new((i - 1) * 0.35, 12, 0, 0)
+		local b = UIKit.Button(footer, nav[2] .. "  " .. nav[1], UDim2.new(0.235, 0, 1, 0), Theme.Palette.Panel, { textColor = Theme.Palette.Text })
+		b.Position = UDim2.new((i - 1) * 0.245, 10, 0, 0)
 		b.TextScaled = false
-		b.TextSize = Theme.TypeSize.Body
+		b.TextSize = Theme.TypeSize.Small
 		b.Activated:Connect(function()
+			AudioService.PlayClick()
 			if Hub.OnAction then Hub.OnAction(nav[1]) end
 		end)
 	end
@@ -164,11 +182,45 @@ end
 function Hub:SetProgression(level, xp, xpNext, coins)
 	if not self.Store then return end
 	if self.Store.Level then self.Store.Level.Text = ("LEVEL %d"):format(level or 1) end
-	if self.Store.Xp then self.Store.Xp.Text = ("%d / %d XP"):format(xp or 0, xpNext or 100) end
 	if self.Store.Coins then self.Store.Coins.Text = ("%d Coins"):format(coins or 0) end
 	if self.Store.XpBar and xpNext and xpNext > 0 then
 		local frac = math.clamp((xp or 0) / xpNext, 0, 1)
 		self.Store.XpBar.Size = UDim2.new(frac, 0, 1, 0)
+	end
+	return ("L%d XP%d/%d C%d"):format(level or 1, xp or 0, xpNext or 0, coins or 0)
+end
+
+function Hub:SetMastery(rank)
+	if self.Store and self.Store.Mastery and rank then
+		self.Store.Mastery.Text = (rank.Display or rank.Name or "BRONZE"):gsub("\n", "")
+		self.Store.Mastery.TextColor3 = Theme.MasteryColor(rank.Id or "bronze")
+	end
+end
+
+function Hub:SetRecords(records)
+	if not self.Store then return end
+	records = records or {}
+	local best = self.Store.Best or {}
+	best.chaos_run = records["chaos_run"]
+	best.dodge_lab = records["dodge_lab"]
+	best.build_blitz = records["build_blitz"]
+	best.sequence_sprint = records["sequence_sprint"]
+	best.survival = records["survival"]
+	self.Store.Best = best
+	for id, lbl in self.Store.Cards do
+		if best[id] then
+			lbl.Text = ("Best: %d"):format(best[id])
+		end
+	end
+	self:RefreshBest()
+end
+
+function Hub:RefreshBest()
+	local best = self.Store.Best or {}
+	if best.survival and self.Store.SurvBest then
+		self.Store.SurvBest.Text = ("Best wins: %d"):format(best.survival)
+	elseif self.Store.SurvBest then
+		self.Store.SurvBest.Text = "Best wins: —"
 	end
 end
 

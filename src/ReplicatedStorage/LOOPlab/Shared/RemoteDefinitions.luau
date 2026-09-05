@@ -16,6 +16,7 @@ return {
 		LeaderboardFetch = "LeaderboardFetch",
 		PlayerCounts = "PlayerCounts",
 		ProfileFetch = "ProfileFetch",
+		TitleEquip = "TitleEquip",
 		PollActivity = "PollActivity",
 	},
 

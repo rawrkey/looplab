@@ -1,13 +1,23 @@
--- MatchHud: in-match overlay. Round info, timer, phase, activity color identity.
+-- MatchHud: in-match overlay. Activity color identity, round, timer, phase,
+-- intensity ladder indicator, center messages. Accepts an ActivityId for palette.
 
 local UIKit = require(script.Parent.Parent.UIKit)
 local Theme = require(script.Parent.Parent.Theme)
+local AudioService = require(script.Parent.Parent.AudioService)
 
 local MatchHud = {
 	Name = "MatchHud",
 	Root = nil,
 	Store = {},
 	ActivityId = nil,
+}
+
+local ACTIVITY_ACCENTS = {
+	chaos_run = Theme.Brand.Primary,
+	dodge_lab = Theme.Brand.Danger,
+	build_blitz = Theme.Brand.Warning,
+	sequence_sprint = Theme.Brand.Secondary,
+	survival = Theme.Accent("survival"),
 }
 
 function MatchHud:Hide()
@@ -32,6 +42,8 @@ function MatchHud:Build(parent)
 	bar.BackgroundColor3 = Theme.Palette.BackgroundAlt
 	bar.BackgroundTransparency = 0.15
 	UIKit.Corner(Theme.Radius.Medium).Parent = bar
+	local edge = UIKit.Frame({ Parent = bar, Size = UDim2.new(1, 0, 0, 4), BackgroundColor3 = Theme.Brand.Primary })
+	self.Store.Edge = edge
 
 	local activity = UIKit.Title(bar, "", UDim2.new(0.62, 0, 0.5, 0), Theme.Palette.Text)
 	activity.TextScaled = false
@@ -39,14 +51,14 @@ function MatchHud:Build(parent)
 	activity.Position = UDim2.new(0.03, 0, 0.25, 0)
 	self.Store.Activity = activity
 
-	local round = UIKit.Text(bar, "", UDim2.new(0.3, 0, 0.38, 0), Theme.Palette.TextDim)
-	round.Position = UDim2.new(0.66, 0, 0.06, 0)
+	local round = UIKit.Text(bar, "", UDim2.new(0.22, 0, 0.38, 0), Theme.Palette.TextDim)
+	round.Position = UDim2.new(0.6, 0, 0.06, 0)
 	round.TextScaled = false
 	round.TextSize = Theme.TypeSize.Small
 	self.Store.Round = round
 
-	local timer = UIKit.Text(bar, "0:00", UDim2.new(0.3, 0, 0.5, 0), Theme.Brand.Gold)
-	timer.Position = UDim2.new(0.66, 0, 0.38, 0)
+	local timer = UIKit.Text(bar, "0:00", UDim2.new(0.18, 0, 0.5, 0), Theme.Brand.Gold)
+	timer.Position = UDim2.new(0.82, 0, 0.38, 0)
 	timer.TextScaled = false
 	timer.TextSize = Theme.TypeSize.Header
 	self.Store.Timer = timer
@@ -72,6 +84,22 @@ function MatchHud:SetActivity(name, accent)
 		self.Store.Activity.Text = name or ""
 		self.Store.Activity.TextColor3 = accent or Theme.Brand.Primary
 	end
+	if self.Store and self.Store.Edge then
+		self.Store.Edge.BackgroundColor3 = accent or Theme.Brand.Primary
+	end
+end
+
+function MatchHud:SetIntensity(level, maxLevel)
+	if not self.Store then return end
+	if level and maxLevel and maxLevel > 0 then
+		for k, v in ACTIVITY_ACCENTS do
+			if self.ActivityId == k then
+				if self.Store.Edge then
+					self.Store.Edge.BackgroundColor3 = Theme.Lerp(Theme.Brand.Success, v, (level - 1) / maxLevel)
+				end
+			end
+		end
+	end
 end
 
 function MatchHud:SetState(data)
@@ -90,6 +118,9 @@ function MatchHud:SetState(data)
 	end
 	if data.Message and self.Store.Message then
 		self.Store.Message.Text = data.Message
+	end
+	if data.IntensityLevel ~= nil then
+		self:SetIntensity(data.IntensityLevel, data.IntensityMax or 4)
 	end
 end
 

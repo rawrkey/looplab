@@ -2,10 +2,13 @@
 -- Any AI session MUST read this file before touching gameplay constants.
 
 type CurrencyDef = { Id: string, DisplayName: string }
+type RankDef = { Id: string, Name: string, Display: string, Xp: number }
+type BadgeDef = { Id: string, Name: string, Desc: string, Icon: string }
+type TitleDef = { Id: string, Name: string, Tier: string }
 
 local GameConfig = {
 	GameName = "LOOPLAB",
-	SchemaVersion = 1,
+	SchemaVersion = 2,
 
 	PlayerData = {
 		MaxRecentGames = 20,
@@ -23,6 +26,60 @@ local GameConfig = {
 		MaxLevel = 50,
 	},
 
+	Progression = {
+		LevelUpCoins = 250,
+		Mastery = {
+			Ranks = {
+				{ Id = "bronze", Name = "BRO\nNZE", Display = "BRONZE", Xp = 0 } :: RankDef,
+				{ Id = "silver", Name = "SILVER", Display = "SILVER", Xp = 300 } :: RankDef,
+				{ Id = "gold", Name = "GOLD", Display = "GOLD", Xp = 800 } :: RankDef,
+				{ Id = "platinum", Name = "PLATINUM", Display = "PLATINUM", Xp = 1600 } :: RankDef,
+				{ Id = "diamond", Name = "DIAMOND", Display = "DIAMOND", Xp = 3000 } :: RankDef,
+			} :: { RankDef },
+			Xp = {
+				Play = 40,
+				Podium = 80,
+				Win = 140,
+				SurvivalPlay = 60,
+				SurvivalPodium = 120,
+				SurvivalWin = 200,
+				ScoreCap = 100,
+			},
+		},
+		Survival = {
+			WinStreakTitle = 3,
+			FinalRoundBadgeThreshold = 5,
+		},
+	},
+
+	Badges = {
+		{ Id = "first_win", Name = "Fresh Winner", Desc = "Win any activity", Icon = "✦" },
+		{ Id = "survival_first", Name = "Last One Standing", Desc = "Win your first Survival match", Icon = "♛" },
+		{ Id = "survival_5", Name = "Survival Veteran", Desc = "Win 5 Survival matches", Icon = "★" },
+		{ Id = "survival_10", Name = "Survival Legend", Desc = "Win 10 Survival matches", Icon = "☄" },
+		{ Id = "survive_all", Name = "Iron Mind", Desc = "Survive all four rounds in one match", Icon = "◈" },
+		{ Id = "final_round", Name = "Deep Runner", Desc = "Reach the final round 5 times", Icon = "⧈" },
+		{ Id = "streak_3", Name = "On Fire", Desc = "Hit a 3 Survival win streak", Icon = "▮" },
+		{ Id = "streak_5", Name = "Unstoppable", Desc = "Hit a 5 Survival win streak", Icon = "▚" },
+		{ Id = "mastery_gold", Name = "Gold Standard", Desc = "Reach GOLD mastery in any game", Icon = "◆" },
+		{ Id = "mastery_diamond", Name = "Diamond League", Desc = "Reach DIAMOND mastery in any game", Icon = "◈" },
+		{ Id = "collection_10", Name = "Showroom", Desc = "Own 10 cosmetics", Icon = "▣" },
+		{ Id = "level_10", Name = "Double Digits", Desc = "Reach level 10", Icon = "⑩" },
+		{ Id = "level_25", Name = "Quarter Century", Desc = "Reach level 25", Icon = "⓬" },
+	} :: { BadgeDef },
+
+	Titles = {
+		{ Id = "last_one_standing", Name = "Last One Standing", Tier = "gold" },
+		{ Id = "survivalist", Name = "Survivalist", Tier = "silver" },
+		{ Id = "chaos_specialist", Name = "Chaos Specialist", Tier = "gold" },
+		{ Id = "dodge_master", Name = "Dodge Master", Tier = "gold" },
+		{ Id = "build_boss", Name = "Build Boss", Tier = "gold" },
+		{ Id = "sequence_master", Name = "Sequence Master", Tier = "gold" },
+		{ Id = "lab_veteran", Name = "Lab Veteran", Tier = "silver" },
+		{ Id = "final_regular", Name = "Final Round Regular", Tier = "bronze" },
+		{ Id = "prime", Name = "Prime", Tier = "diamond" },
+	} :: { TitleDef },
+
 	Rewards = {
 		Standalone = {
 			BaseXp = 50,
@@ -34,6 +91,7 @@ local GameConfig = {
 		SurvivalWin = { Xp = 300, Coins = 200 },
 		SurvivalPodium = { Xp = 150, Coins = 100 },
 		DailyChallenge = { Xp = 100, Coins = 60 },
+		Mastery = { MaxCoins = 120, MaxXp = 60 },
 	},
 
 	Daily = {
@@ -83,22 +141,22 @@ local GameConfig = {
 	},
 
 	Cosmetics = {
-		{ Id = "default_hat", Name = "Default Beanie", Category = "Hat", Price = 0, DefaultOwned = true },
-		{ Id = "cap", Name = "Classic Cap", Category = "Hat", Price = 0, DefaultOwned = true },
-		{ Id = "fire_hat", Name = "Flame Cap", Category = "Hat", Price = 150 },
-		{ Id = "ice_hat", Name = "Frost Crown", Category = "Hat", Price = 150 },
-		{ Id = "crown", Name = "LOOPLAB Crown", Category = "Hat", Price = 500 },
-		{ Id = "horns", Name = "Imp Horns", Category = "Hat", Price = 200 },
-		{ Id = "bowtie", Name = "Bowtie", Category = "Accessory", Price = 60 },
-		{ Id = "sunglasses", Name = "Pixel Shades", Category = "Accessory", Price = 120 },
-		{ Id = "scarf", Name = "Scarlet Scarf", Category = "Accessory", Price = 90 },
-		{ Id = "backpack", Name = "Survival Pack", Category = "Accessory", Price = 180 },
-		{ Id = "thruster", Name = "Jet Thruster", Category = "Accessory", Price = 250 },
-		{ Id = "aura", Name = "Gold Aura", Category = "Effect", Price = 400 },
-		{ Id = "trail", Name = "Pixel Trail", Category = "Effect", Price = 220 },
-		{ Id = "halo", Name = "Angel Halo", Category = "Hat", Price = 350 },
-		{ Id = "headset", Name = "Gamer Headset", Category = "Accessory", Price = 160 },
-		{ Id = "vip", Name = "VIP Badge", Category = "Badge", Price = 0 },
+		{ Id = "default_hat", Name = "Default Beanie", Category = "Hat", Price = 0, DefaultOwned = true, Emoji = "🧢" },
+		{ Id = "cap", Name = "Classic Cap", Category = "Hat", Price = 0, DefaultOwned = true, Emoji = "🧢" },
+		{ Id = "fire_hat", Name = "Flame Cap", Category = "Hat", Price = 150, Emoji = "🔥" },
+		{ Id = "ice_hat", Name = "Frost Crown", Category = "Hat", Price = 150, Emoji = "❄️" },
+		{ Id = "crown", Name = "LOOPLAB Crown", Category = "Hat", Price = 500, Emoji = "👑" },
+		{ Id = "horns", Name = "Imp Horns", Category = "Hat", Price = 200, Emoji = "😈" },
+		{ Id = "bowtie", Name = "Bowtie", Category = "Accessory", Price = 60, Emoji = "🎀" },
+		{ Id = "sunglasses", Name = "Pixel Shades", Category = "Accessory", Price = 120, Emoji = "🕶️" },
+		{ Id = "scarf", Name = "Scarlet Scarf", Category = "Accessory", Price = 90, Emoji = "🧣" },
+		{ Id = "backpack", Name = "Survival Pack", Category = "Accessory", Price = 180, Emoji = "🎒" },
+		{ Id = "thruster", Name = "Jet Thruster", Category = "Accessory", Price = 250, Emoji = "🚀" },
+		{ Id = "aura", Name = "Gold Aura", Category = "Effect", Price = 400, Emoji = "✨" },
+		{ Id = "trail", Name = "Pixel Trail", Category = "Effect", Price = 220, Emoji = "💫" },
+		{ Id = "halo", Name = "Angel Halo", Category = "Hat", Price = 350, Emoji = "😇" },
+		{ Id = "headset", Name = "Gamer Headset", Category = "Accessory", Price = 160, Emoji = "🎧" },
+		{ Id = "vip", Name = "VIP Badge", Category = "Badge", Price = 0, Emoji = "💎" },
 	},
 
 	Monetization = {
@@ -108,6 +166,44 @@ local GameConfig = {
 
 	Analytics = {
 		Enabled = true,
+	},
+
+	Audio = {
+		Music = {
+			Hub = "rbxassetid://1837678979",
+			ChaosRun = "rbxassetid://9040222828",
+			DodgeLab = "rbxassetid://9043422333",
+			BuildBlitz = "rbxassetid://1837768013",
+			SequenceSprint = "rbxassetid://9045929839",
+			Survival = {
+				Lobby = "rbxassetid://9042466902",
+				Normal = "rbxassetid://9041912631",
+				Intense = "rbxassetid://9040222828",
+				Final = "rbxassetid://9044820101",
+			},
+			Victory = "rbxassetid://1836473422",
+		},
+		Sfx = {
+			Click = "rbxassetid://88442833509532",
+			Hover = "rbxassetid://119393948345399",
+			Countdown = "rbxassetid://1836473398",
+			Go = "rbxassetid://1836473422",
+			Checkpoint = "rbxassetid://1837678979",
+			Hit = "rbxassetid://9044820101",
+			Place = "rbxassetid://88442833509532",
+			Score = "rbxassetid://1836473398",
+			Toast = "rbxassetid://1837768013",
+			Eliminate = "rbxassetid://9044820101",
+			Win = "rbxassetid://1836473422",
+			LevelUp = "rbxassetid://1836473422",
+			Badge = "rbxassetid://1837678979",
+			Title = "rbxassetid://1836473398",
+			Mastery = "rbxassetid://9044820101",
+			Final3 = "rbxassetid://9042466902",
+			Final2 = "rbxassetid://9044820101",
+			PersonalBest = "rbxassetid://1836473398",
+			Reward = "rbxassetid://1837768013",
+		},
 	},
 }
 

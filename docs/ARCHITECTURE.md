@@ -115,8 +115,14 @@ delivery client-side. `PollService` is therefore the **sync backbone**:
   `Remotes.Functions.PollActivity` (RemoteFunction) on an interval that stays
   under `RemoteGuardService`'s per-remote throttle.
 - `PollActivity` returns a single payload:
-  `{ Activity = <current snapshot or nil>, Economy = {Coins, Xp, Level},
-  Toasts = {{message}} }`.
+  `{ Activity = <current snapshot or nil>, Economy = {Coins, Xp, Level,
+  MasteryXp, MasteryRank}, Toasts = {{message}}, Fx = {{Kind, Data}},
+  Daily = <daily state> }`.
+- The `Fx` array is a per-player push queue drained on each poll. It carries
+  server-generated progression moments (`Badge`, `Title`, `MasteryUp`,
+  `PersonalBest`) that the client renders via `EffectsService` (badge reveal,
+  title reveal, mastery up, personal-best banner). Work is serialized through
+  `ProgressionController.HandleFxQueue`.
 - `Activity` has a `Mode`: `"Queue" | "Standalone" | "Survival"` (with
   `Phase`: `Lobby | Countdown | Running | Aborted`) | `"Results"`.
 - The server **also fires** RemoteEvents for production use; the poll path is
@@ -297,13 +303,14 @@ This is the contract v2. New activities register their module under
 
 | Service | Layer | Purpose |
 |---|---|---|
-| PlayerDataService | Server | Load/save/version player data (SchemaVersion) |
+| PlayerDataService | Server | Load/save/version player data (SchemaVersion; v2 adds MasteryXp, Badges, Titles, EquippedTitle, Records, Survival streak) |
 | EconomyService | Server | XP/coins/level authority + grant |
 | ActivityService | Server | Activity lifecycle orchestration |
-| QueueService | Server | Queue/lobby management → match launch |
-| SurvivalMatchService | Server | Survival round orchestration + eliminations |
+| QueueService | Server | Queue/lobby management → match launch + standalone results payload |
+| SurvivalMatchService | Server | Survival round orchestration + eliminations + results payload |
+| ProgressionService | Server | Mastery ranks, badge/title evaluation, records, personal bests, Fx queue |
 | DailyChallengeService | Server | Daily XP-bonus challenge |
-| PollService | Server | Per-player activity snapshot for the v2 poll sync |
+| PollService | Server | Per-player activity snapshot for the v2 poll sync (Toasts + Fx drain) |
 | RewardService | Server | Authoritative reward issuance |
 | LeaderboardService | Server | Scoreboard entries per board |
 | CosmeticService | Server | Cosmetic catalog / owned cosmetics |
@@ -313,8 +320,8 @@ This is the contract v2. New activities register their module under
 | RemoteGuardService | Server | Remote validation + rate limiting |
 | ActivityRegistry | Shared | Activity metadata + registration (all 4 games) |
 | RemoteBuilder / RemoteDefinitions | Shared | Runtime remote creation from the single contract |
-| GameConfig | Configuration | All tunables (rewards, timings, economy, remotes) |
-| ViewController + UIKit + Theme | Client | Runtime-built UI: 8 screens, styling, brand |
+| GameConfig | Configuration | All tunables (rewards, timings, economy, remotes, mastery, badges, titles) |
+| ViewController + UIKit + Theme | Client | Runtime-built UI: 9 screens (+ Cosmetics), styling, brand, motion |
 | Bootstraps (Server/Client) | Both | Dependency-ordered startup + poll loop |
 
 **Not built (target only):** RecommendationService, PartyService,
@@ -334,11 +341,19 @@ only.
   ActivityRegistry, RemoteDefinitions, RemoteBuilder), `Configuration/`
   (GameConfig), runtime `Remotes/`.
 - **Client** (`StarterPlayerScripts.LOOPlab.Client`): `Bootstrap` LocalScript,
-  `Components/` (8 Screens + ViewController, UIKit, Theme, EffectsService,
-  AudioService), `Controllers/` (Hub, Queue, Match, Spectator, Progression,
-  Leaderboard). UI is built into a single runtime ScreenGui under PlayerGui.
+  `Components/` (9 Screens including new Cosmetics + ViewController, UIKit,
+  Theme, EffectsService, AudioService), `Controllers/` (Hub, Queue, Match,
+  Spectator, Progression, Leaderboard). UI is built into a single runtime
+  ScreenGui under PlayerGui.
+- **Progression UX (final):** Hub shows level/XP/coins + mastery strip + per
+  activity bests; Profile shows stats/mastery/badges/titles/records with daily
+  claim; new Cosmetics screen lists owned titles + badge collection; Results
+  shows mastery + rewards; MatchHud has survival intensity ladder (Final3 /
+  Final2 banners + escalating music); server-pushed Fx queue renders
+  badges/titles/mastery/personal-best moments.
 - **Sync:** poll-based fallback via PollService (v2), RemoteEvents fire for
   production; playtested end-to-end (standalone + solo survival → Results,
-  coins/XP awarded, victory overlay).
+  coins/XP/mastery/badges awarded, victory overlay, results→hub dismissal,
+  cosmetics/profile/leaderboards/settings navigation, reduced-motion persist).
 - **Remaining:** Datastore-backed leaderboards/dailies confirmed, cosmetics
-  catalog + purchase flow, in-Studio multiplayer verification.
+  purchase flow, in-Studio multiplayer verification.

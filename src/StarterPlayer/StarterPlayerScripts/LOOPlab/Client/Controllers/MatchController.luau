@@ -18,6 +18,7 @@ local ActivityName = nil
 local Accent = nil
 local Round = 1
 local TotalRounds = 1
+local _finalShown = {}
 local PLAYER = Players.LocalPlayer
 
 local ACTIVITY_NAMES = {
@@ -41,6 +42,15 @@ local function resolvePlayers(userIds)
 	return list
 end
 
+local function survivalIntensity(round, totalRounds)
+	if totalRounds >= 4 then
+		if round >= totalRounds then return 3 end
+		if round >= totalRounds - 1 then return 2 end
+		return 1
+	end
+	return math.clamp(round, 1, 3)
+end
+
 function MatchController.RoundBegin(payload)
 	Mode = payload.Mode or "standalone"
 	ActivityId = payload.ActivityId or "survival"
@@ -48,6 +58,7 @@ function MatchController.RoundBegin(payload)
 	Accent = Theme.Accent(ActivityId)
 	Round = payload.Round or 1
 	TotalRounds = payload.TotalRounds or 1
+	_finalShown = {}
 
 	Hud:SetActivity(ActivityName, Accent)
 	Hud:SetState({ Round = Round, TotalRounds = TotalRounds, Phase = "Eliminating", Message = payload.Message or "" })
@@ -55,15 +66,15 @@ function MatchController.RoundBegin(payload)
 	ViewController.Show("MatchHud")
 
 	if Mode == "Standalone" then
+		AudioService.PlayActivityMusic(ActivityId, 1)
 		EffectsService.Banner(ActivityName:upper(), "GOOD LUCK!", Accent)
-		AudioService.PlayActivityMusic(ActivityId)
 		task.delay(0.4, function()
 			EffectsService.Countdown(3, function()
 				AudioService.PlayGo()
 			end)
 		end)
 	elseif Mode == "Survival" then
-		AudioService.PlayActivityMusic(ActivityId)
+		AudioService.PlayActivityMusic(ActivityId, survivalIntensity(Round, TotalRounds))
 		task.delay(0.5, function()
 			EffectsService.RoundBanner(Round, TotalRounds, ActivityName, Accent)
 			AudioService.PlayCountdown()
@@ -86,14 +97,28 @@ end
 
 function MatchController.Elimination(payload)
 	if not Hud then return end
+	local survivors = resolvePlayers(payload.SurvivorUserIds or {})
 	local meOut = false
 	for _, id in (payload.EliminatedUserIds or {}) do
 		if id == PLAYER.UserId then meOut = true break end
 	end
+
+	if Mode == "Survival" then
+		local n = #survivors
+		if n <= 3 and n >= 2 and not _finalShown[n] then
+			_finalShown[n] = true
+			AudioService.SetIntensity(3)
+			if n == 2 then
+				EffectsService.Final2()
+			elseif n == 3 then
+				EffectsService.Final3()
+			end
+		end
+	end
+
 	if meOut then
 		AudioService.PlayEliminated()
 		EffectsService.EliminateFlash(Theme.Brand.Danger)
-		local survivors = resolvePlayers(payload.SurvivorUserIds or {})
 		SpectatorController.Begin({ Cycle = survivors })
 	else
 		EffectsService.Toast(payload.Message or "A player was eliminated.")

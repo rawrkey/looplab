@@ -118,6 +118,7 @@ local function startStandalone(activityId)
 			local Leaderboard = require(script.Parent.LeaderboardService)
 			local Daily = require(script.Parent.DailyChallengeService)
 			local PlayerData = require(script.Parent.PlayerDataService)
+			local Progression = require(script.Parent.ProgressionService)
 
 			local rewardsByPlayer = {}
 			local winnerId = 0
@@ -134,12 +135,20 @@ local function startStandalone(activityId)
 			for i, row in scoresheet.Rows do
 				local p = row.Player
 				if p and p.Parent then
-					RewardService.GrantStandalone(p, i, #scoresheet.Rows, activityId, row.Score, res.sessionId)
+					local granted = RewardService.GrantStandalone(p, i, #scoresheet.Rows, activityId, row.Score, res.sessionId)
 					Leaderboard.SubmitGameScore(activityId, p, row.Score)
 					Daily.RecordProgress(p, activityId, row.Score)
 					PlayerData.RecordRecent(p, { ActivityId = activityId, Mode = "Standalone", Date = os.date("Y-m-d"), Score = row.Score })
+					local fx = Progression.ProcessStandalone(p, i, row.Score, activityId)
 					local data = PlayerData.GetForPlayer(p)
-					rewardsByPlayer[p.UserId] = { Coins = data.Coins, Xp = data.Xp }
+					rewardsByPlayer[p.UserId] = {
+						Coins = data.Coins,
+						Xp = data.Xp,
+						Granted = granted or { Xp = 0, Coins = 0 },
+						Fx = fx,
+						MasteryXp = data.MasteryXp,
+						MasteryRank = Progression.GetMasteryRank(data.MasteryXp),
+					}
 				end
 			end
 

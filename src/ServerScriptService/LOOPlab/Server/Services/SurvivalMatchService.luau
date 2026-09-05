@@ -210,11 +210,13 @@ function Service.FinishMatch(match)
 	local Leaderboard = require(script.Parent.LeaderboardService)
 	local PlayerData = require(script.Parent.PlayerDataService)
 	local Daily = require(script.Parent.DailyChallengeService)
+	local Progression = require(script.Parent.ProgressionService)
 
 	local rows = {}
+	local rewardsByUser = {}
 	for _, p in match.players do
 		local rank = placements[p.UserId] and placements[p.UserId].rank or (#match.players)
-		RewardService.GrantSurvivalOutcome(p, rank, "sv_match" .. tostring(match.startedAt))
+		local granted = RewardService.GrantSurvivalOutcome(p, rank, "sv_match" .. tostring(match.startedAt))
 
 		local survived = match.survivedRounds[p.UserId] or 0
 		for r = 1, survived do
@@ -229,19 +231,34 @@ function Service.FinishMatch(match)
 		if data.Survival.BestPlacement == 0 or rank < data.Survival.BestPlacement then
 			data.Survival.BestPlacement = rank
 		end
+		local fx = Progression.ProcessSurvival(p, rank, survived, match.totalRounds)
 		PlayerData.SavePlayer(p)
 
 		Leaderboard.SubmitSurvival(p, rank, survived)
 		Daily.RecordProgress(p, "survival", rank)
 
-		table.insert(rows, { UserId = p.UserId, Name = p.Name, Score = rank, Place = rank })
+		rewardsByUser[p.UserId] = {
+			Coins = data.Coins,
+			Xp = data.Xp,
+			Granted = granted or { Xp = 0, Coins = 0 },
+			Fx = fx,
+			MasteryXp = data.MasteryXp,
+			MasteryRank = Progression.GetMasteryRank(data.MasteryXp),
+		}
+		table.insert(rows, {
+			UserId = p.UserId,
+			Name = p.Name,
+			Score = rank,
+			Place = rank,
+			Rewards = rewardsByUser[p.UserId],
+		})
 	end
 
 	for _, p in match.players do
 		_remotes.Events.Winner:FireClient(p, {
 			WinnerUserId = winner and winner.UserId or 0,
 			WinnerName = winner and winner.Name or "none",
-			Rewards = {},
+			Rewards = rewardsByUser[p.UserId] or {},
 			Rows = rows,
 		})
 		_remotes.Events.Results:FireClient(p, {
@@ -259,7 +276,7 @@ function Service.FinishMatch(match)
 			GameMode = "Survival",
 			ActivityId = "survival",
 			Rows = rows,
-			Rewards = {},
+			Rewards = rewardsByUser[p.UserId] or {},
 			WinnerUserId = winner and winner.UserId or 0,
 			WinnerName = winner and winner.Name or "none",
 		}

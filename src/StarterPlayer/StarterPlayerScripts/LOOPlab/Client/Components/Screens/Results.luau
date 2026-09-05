@@ -1,8 +1,9 @@
--- Results: animated end-of-round scoreboard with rewards.
+-- Results: animated end-of-round scoreboard with rewards + progression payload.
 
 local UIKit = require(script.Parent.Parent.UIKit)
 local Theme = require(script.Parent.Parent.Theme)
 local AudioService = require(script.Parent.Parent.AudioService)
+local EffectsService = require(script.Parent.Parent.EffectsService)
 
 local Results = {
 	Name = "Results",
@@ -20,7 +21,6 @@ function Results:Show(data)
 	self.Root.Visible = true
 	if data then self:SetResults(data) end
 	UIKit.SlideIn(self.Panel, 0.03, Theme.Motion.Normal)
-	AudioService.PlayScore()
 end
 
 function Results:Build(parent)
@@ -34,16 +34,31 @@ function Results:Build(parent)
 	local scrim = UIKit.Frame({ Parent = root, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.5, BorderSizePixel = 0 })
 	self.Scrim = scrim
 
-	local panel = UIKit.PanelAlt(root, UDim2.new(0.6, 0, 0.76, 0), Theme.Brand.Primary)
+	local panel = UIKit.PanelAlt(root, UDim2.new(0.62, 0, 0.8, 0), Theme.Brand.Primary)
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
 	self.Panel = panel
 
-	local title = UIKit.Title(panel, "RESULTS", UDim2.new(1, 0, 0, 52), Theme.Brand.Primary)
+	local title = UIKit.Title(panel, "RESULTS", UDim2.new(1, 0, 0, 48), Theme.Brand.Primary)
 	title.TextScaled = false
 	title.TextSize = Theme.TypeSize.Huge
 
-	local list = UIKit.Frame({ Parent = panel, Size = UDim2.new(0.94, 0, 0.62, 0), Position = UDim2.new(0.03, 0, 0, 58) })
+	-- mastery strip
+	local masteryBar = UIKit.Frame({ Parent = panel, Size = UDim2.new(0.94, 0, 0, 26), Position = UDim2.new(0.03, 0, 0, 52) })
+	masteryBar.BackgroundTransparency = 1
+	local rankLbl = UIKit.Text(masteryBar, "MASTERY: BRONZE", UDim2.new(0.5, 0, 1, 0), Theme.MasteryColor("bronze"))
+	rankLbl.TextScaled = false
+	rankLbl.TextSize = Theme.TypeSize.Small
+	rankLbl.TextXAlignment = Enum.TextXAlignment.Left
+	local mxpLbl = UIKit.Text(masteryBar, "", UDim2.new(0.48, 0, 1, 0), Theme.Palette.TextDim)
+	mxpLbl.Position = UDim2.new(0.52, 0, 0, 0)
+	mxpLbl.TextScaled = false
+	mxpLbl.TextSize = Theme.TypeSize.Small
+	mxpLbl.TextXAlignment = Enum.TextXAlignment.Right
+	self.Store.MasteryRank = rankLbl
+	self.Store.MasteryXp = mxpLbl
+
+	local list = UIKit.Frame({ Parent = panel, Size = UDim2.new(0.94, 0, 0.6, 0), Position = UDim2.new(0.03, 0, 0, 84) })
 	list.BackgroundTransparency = 1
 	UIKit.Corner(Theme.Radius.Medium).Parent = list
 	self.Store.List = list
@@ -61,12 +76,13 @@ function Results:Build(parent)
 	rewardMsg.TextSize = Theme.TypeSize.Header
 	self.Store.Rewards = rewardMsg
 
-	local btn = UIKit.GradientButton(panel, "BACK TO HUB", UDim2.new(0.6, 0, 0, 44), Theme.Brand.Success)
+	local btn = UIKit.GradientButton(panel, "BACK TO HUB", UDim2.new(0.5, 0, 0, 44), Theme.Brand.Success)
 	btn.AnchorPoint = Vector2.new(0.5, 1)
 	btn.Position = UDim2.new(0.5, 0, 1, -10)
 	btn.TextScaled = false
 	btn.TextSize = Theme.TypeSize.Body
 	btn.Activated:Connect(function()
+		AudioService.PlayClick()
 		if Results.OnClose then Results.OnClose() end
 	end)
 end
@@ -79,6 +95,18 @@ function Results:SetResults(data)
 		if r.Parent then r:Destroy() end
 	end
 	self.Store.Rows = {}
+
+	-- progression payload
+	local progression = data.Progression or data.Rewards or {}
+	if progression.MasteryRank and self.Store.MasteryRank then
+		local rank = progression.MasteryRank
+		self.Store.MasteryRank.Text = ("MASTERY: %s"):format((rank.Display or rank.Name or "BRONZE"):gsub("\n", ""))
+		self.Store.MasteryRank.TextColor3 = Theme.MasteryColor(rank.Id or "bronze")
+	end
+	if progression.MasteryXp ~= nil and self.Store.MasteryXp then
+		self.Store.MasteryXp.Text = ("%d MXP"):format(progression.MasteryXp)
+	end
+
 	local rows = data.Rows or {}
 	for i, row in rows do
 		local p = row.Player
@@ -110,8 +138,9 @@ function Results:SetResults(data)
 	end
 
 	if data.Rewards then
-		local xp = data.Rewards.Xp or 0
-		local coins = data.Rewards.Coins or 0
+		local granted = data.Rewards.Granted or {}
+		local xp = granted.Xp or 0
+		local coins = granted.Coins or 0
 		self.Store.Rewards.Text = ("REWARDS  +%d XP   +%d Coins"):format(xp, coins)
 	else
 		self.Store.Rewards.Text = ""

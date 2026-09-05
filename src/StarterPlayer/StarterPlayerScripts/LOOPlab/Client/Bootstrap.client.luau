@@ -22,6 +22,7 @@ local Results = require(script.Parent.Components.Screens.Results)
 local Leaderboards = require(script.Parent.Components.Screens.Leaderboards)
 local Profile = require(script.Parent.Components.Screens.Profile)
 local Settings = require(script.Parent.Components.Screens.Settings)
+local Cosmetics = require(script.Parent.Components.Screens.Cosmetics)
 
 local HubController = require(script.Parent.Controllers.HubController)
 local QueueController = require(script.Parent.Controllers.QueueController)
@@ -42,6 +43,7 @@ local screens = {
 	Leaderboards = Leaderboards,
 	Profile = Profile,
 	Settings = Settings,
+	Cosmetics = Cosmetics,
 }
 
 for _, s in screens do
@@ -58,7 +60,10 @@ ProgressionController.Init(screens)
 LeaderboardController.Init(screens)
 
 Results.OnClose = function()
+	QueueController.DismissResults()
 	ViewController.Show("Hub")
+	ProgressionController.FetchProfile()
+	AudioService.PlayHubMusic()
 end
 
 local remotes = RemoteBuilder.GetAll()
@@ -81,6 +86,9 @@ local function sync()
 	if type(payload.Economy) == "table" then
 		ProgressionController.EconomyUpdate(payload.Economy)
 	end
+	if type(payload.Fx) == "table" then
+		ProgressionController.HandleFxQueue(payload.Fx)
+	end
 
 	local a = payload.Activity
 	if not a or type(a) ~= "table" then
@@ -91,6 +99,9 @@ local function sync()
 	end
 
 	local mode = a.Mode
+	if mode ~= "Results" then
+		QueueController.ResultsDismissed = false
+	end
 	if mode == "Queue" then
 		QueueController.QueueUpdate(a)
 		last.mode = "Queue"
@@ -98,11 +109,11 @@ local function sync()
 	elseif mode == "Results" then
 		if not last.resultsSeen then
 			last.resultsSeen = true
-			QueueController.Results({ Rows = a.Rows, Rewards = a.Rewards })
 			if a.WinnerUserId and a.WinnerUserId ~= 0 then
 				pcall(MatchController.Winner, MatchController, { WinnerUserId = a.WinnerUserId, WinnerName = a.WinnerName })
 			end
 		end
+		QueueController.Results({ Rows = a.Rows, Rewards = a.Rewards })
 	elseif mode == "Standalone" then
 		if last.mode ~= "Standalone" then
 			MatchController.RoundBegin({
@@ -112,6 +123,7 @@ local function sync()
 				TotalRounds = 1,
 				Name = a.ActivityName or a.ActivityId,
 			})
+			last.elimHash = ""
 		end
 		MatchController.ActivityUpdate({ TimeLeft = a.TimeLeft })
 		last.mode = "Standalone"
@@ -146,6 +158,7 @@ local function sync()
 					TotalRounds = a.TotalRounds,
 					ActivityId = a.ActivityId,
 				})
+				last.elimHash = ""
 			end
 			MatchController.ActivityUpdate({ TimeLeft = a.TimeLeft })
 			local hash = table.concat(a.EliminatedUserIds or {}, ",")

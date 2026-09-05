@@ -7,38 +7,23 @@ local RunService = game:GetService("RunService")
 if RunService:IsServer() then return {} end
 
 local LOCAL = Players.LocalPlayer or Players.PlayerAdded:Wait()
-
--- ============================================================
--- ASSET LIBRARY (rbxassetid). Swap URLs here to re-skin audio.
--- ============================================================
-local AUDIO = {
-	Hub1 = "rbxassetid://1837678979",
-	Hub2 = "rbxassetid://1841179587",
-	ChaosRun = "rbxassetid://9040222828",
-	DodgeLab = "rbxassetid://9043422333",
-	BuildBlitz = "rbxassetid://1837768013",
-	SequenceSprint = "rbxassetid://9045929839",
-	SurvivalCalm = "rbxassetid://9041912631",
-	SurvivalIntense = "rbxassetid://9040222828",
-	SurvivalFinal = "rbxassetid://9044820101",
-	Victory = "rbxassetid://1836473422",
-	Eliminated = "rbxassetid://9044820101",
-	Lobby = "rbxassetid://9042466902",
-
-	Click = "rbxassetid://88442833509532",
-	Hover = "rbxassetid://119393948345399",
-	Countdown = "rbxassetid://1836473398",
-	Go = "rbxassetid://1836473422",
-	Checkpoint = "rbxassetid://1837678979",
-	Hit = "rbxassetid://9044820101",
-	Place = "rbxassetid://88442833509532",
-	Score = "rbxassetid://1836473398",
-	Toast = "rbxassetid://1837768013",
-	Eliminate = "rbxassetid://9044820101",
-	Win = "rbxassetid://1836473422",
-}
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local GameConfig = require(ReplicatedStorage:WaitForChild("LOOPlab").Configuration.GameConfig)
 
 local AudioService = {}
+
+-- ============================================================
+-- AUDIO: pull asset library from GameConfig (single source of truth).
+-- Fallbacks keep prod safe if config lags.
+-- ============================================================
+local MUSIC = GameConfig.Audio.Music
+local SFX = GameConfig.Audio.Sfx
+local FALLBACK_MUSIC = { Hub1 = "rbxassetid://1837678979", Hub2 = "rbxassetid://1841179587", SurvivalCalm = "rbxassetid://9041912631" }
+local FALLBACK_SFX = { Click = "rbxassetid://88442833509532", Hover = "rbxassetid://119393948345399", Toast = "rbxassetid://1837768013" }
+local function resolve(set, key, fallbackKey)
+	if set and set[key] then return set[key] end
+	return FALLBACK_MUSIC[fallbackKey or key] or FALLBACK_SFX[key] or ""
+end
 
 local SoundService = game:GetService("SoundService")
 local root = Instance.new("Folder")
@@ -56,14 +41,33 @@ local sfxChannel = Instance.new("Sound")
 sfxChannel.Name = "Sfx"
 sfxChannel.Parent = root
 
+local SfxQueue = {}
+local SfxBusy = false
+local function drainSfx()
+	if SfxBusy or #SfxQueue == 0 then return end
+	SfxBusy = true
+	local nextSfx = table.remove(SfxQueue, 1)
+	sfxChannel.SoundId = nextSfx.id
+	sfxChannel.Volume = nextSfx.volume or 1
+	sfxChannel.PlaybackSpeed = nextSfx.speed or 1
+	sfxChannel:Play()
+	sfxChannel.Ended:Wait()
+	SfxBusy = false
+	if #SfxQueue > 0 then drainSfx() end
+end
+
 local function playSfx(idOrAsset: string, opts)
 	opts = opts or {}
-	pcall(function()
-		sfxChannel.SoundId = AUDIO[idOrAsset] or idOrAsset
-		sfxChannel.Volume = (opts.volume or 1) * Volume.Sfx
-		sfxChannel.PlaybackSpeed = opts.speed or 1
-		sfxChannel:Play()
-	end)
+	local asset = SFX and SFX[idOrAsset] or idOrAsset
+	if not asset or asset == "" then
+		asset = FALLBACK_SFX[idOrAsset] or idOrAsset
+	end
+	table.insert(SfxQueue, {
+		id = asset,
+		volume = (opts.volume or 1) * Volume.Sfx,
+		speed = opts.speed or 1,
+	})
+	task.spawn(drainSfx)
 end
 
 local musicPool = {}
@@ -108,12 +112,12 @@ function AudioService.StopMusic(fade: number?)
 	if activeId then
 		local old = musicPool[activeId]
 		if old then
-		task.spawn(function()
-			local t = game:GetService("TweenService"):Create(old, TweenInfo.new(fade, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Volume = 0 })
-			t:Play()
-			t.Completed:Wait()
-			old:Stop()
-		end)
+			task.spawn(function()
+				local t = game:GetService("TweenService"):Create(old, TweenInfo.new(fade, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Volume = 0 })
+				t:Play()
+				t.Completed:Wait()
+				old:Stop()
+			end)
 		end
 	end
 	activeId = nil
@@ -122,29 +126,37 @@ end
 -- intensity ladder for survival
 function AudioService.SetIntensity(level: number)
 	local map = {
-		[0] = AUDIO.Lobby,
-		[1] = AUDIO.SurvivalCalm,
-		[2] = AUDIO.SurvivalIntense,
-		[3] = AUDIO.SurvivalFinal,
+		[0] = MUSIC and MUSIC.Survival and MUSIC.Survival.Lobby or FALLBACK_MUSIC.SurvivalCalm,
+		[1] = MUSIC and MUSIC.Survival and MUSIC.Survival.Normal or FALLBACK_MUSIC.SurvivalCalm,
+		[2] = MUSIC and MUSIC.Survival and MUSIC.Survival.Intense or FALLBACK_MUSIC.SurvivalCalm,
+		[3] = MUSIC and MUSIC.Survival and MUSIC.Survival.Final or FALLBACK_MUSIC.SurvivalCalm,
 	}
-	local asset = map[level] or AUDIO.SurvivalCalm
+	local asset = map[level] or FALLBACK_MUSIC.SurvivalCalm
 	if activeId ~= asset then
 		AudioService.PlayMusic(asset, 0.5)
 	end
 end
 
-function AudioService.PlayActivityMusic(activityId: string)
+function AudioService.PlayActivityMusic(activityId: string, intensity: number?)
+	if activityId == "survival" then
+		AudioService.SetIntensity(math.clamp(intensity or 1, 0, 3))
+		return
+	end
 	local map = {
-		chaos_run = AUDIO.ChaosRun,
-		dodge_lab = AUDIO.DodgeLab,
-		build_blitz = AUDIO.BuildBlitz,
-		sequence_sprint = AUDIO.SequenceSprint,
+		chaos_run = MUSIC and MUSIC.ChaosRun or FALLBACK_MUSIC.Hub1,
+		dodge_lab = MUSIC and MUSIC.DodgeLab or FALLBACK_MUSIC.Hub1,
+		build_blitz = MUSIC and MUSIC.BuildBlitz or FALLBACK_MUSIC.Hub1,
+		sequence_sprint = MUSIC and MUSIC.SequenceSprint or FALLBACK_MUSIC.Hub1,
 	}
-	AudioService.PlayMusic(map[activityId] or AUDIO.Hub1, 0.5)
+	AudioService.PlayMusic(map[activityId] or FALLBACK_MUSIC.Hub1, 0.5)
 end
 
 function AudioService.PlayHubMusic()
-	AudioService.PlayMusic(AUDIO.Hub1, 0.7)
+	AudioService.PlayMusic(MUSIC and MUSIC.Hub or FALLBACK_MUSIC.Hub1, 0.7)
+end
+
+function AudioService.PlayLobby()
+	AudioService.PlayMusic(MUSIC and MUSIC.Survival and MUSIC.Survival.Lobby or FALLBACK_MUSIC.SurvivalCalm, 0.5)
 end
 
 function AudioService.PlayVictory()
@@ -179,6 +191,31 @@ function AudioService.PlayScore()
 end
 function AudioService.PlayToast()
 	playSfx("Toast")
+end
+
+function AudioService.PlayLevelUp()
+	playSfx("LevelUp")
+end
+function AudioService.PlayBadge()
+	playSfx("Badge")
+end
+function AudioService.PlayTitle()
+	playSfx("Title")
+end
+function AudioService.PlayMastery()
+	playSfx("Mastery")
+end
+function AudioService.PlayFinal3()
+	playSfx("Final3")
+end
+function AudioService.PlayFinal2()
+	playSfx("Final2")
+end
+function AudioService.PlayPersonalBest()
+	playSfx("PersonalBest")
+end
+function AudioService.PlayRewardReveal()
+	playSfx("Reward")
 end
 
 function AudioService.SetMusicVolume(v: number)
