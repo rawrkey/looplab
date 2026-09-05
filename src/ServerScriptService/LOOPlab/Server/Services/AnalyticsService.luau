@@ -1,19 +1,14 @@
--- AnalyticsService: lightweight event logging. Uses Roblox AnalyticsService:FireEvent.
--- Never logs PII beyond Roblox-supported Player identity.
+-- AnalyticsService: lightweight event logging using AnalyticsService.
 
 local RunService = game:GetService("RunService")
 if RunService:IsClient() then
 	return {}
 end
 
-local HttpService = game:GetService("HttpService")
 local Analytics = game:GetService("AnalyticsService")
 
 local Service = {}
 
--- Fire a gameplay event (name, player optional, data table).
--- Roblox AnalyticsService.FireEvent(player, eventName, ...) supports up to 2 custom fields.
--- We flatten key metrics into event name + 2 params to stay within the API, and log locally.
 function Service.Fire(player: Player?, eventName: string, data: { [string]: any }?)
 	local ok, err = pcall(function()
 		local param1 = ""
@@ -23,7 +18,7 @@ function Service.Fire(player: Player?, eventName: string, data: { [string]: any 
 			param2 = tostring(data.b or data.Place or data.Score or "")
 		end
 		if player then
-			Analytics:FireEvent(player, eventName, param1, param2)
+			Analytics:FireEvent(player.UserId, eventName, param1, param2)
 		else
 			Analytics:FireEvent(eventName, param1, param2)
 		end
@@ -33,7 +28,6 @@ function Service.Fire(player: Player?, eventName: string, data: { [string]: any 
 	end
 end
 
--- Log a raw line to Output (for local/debug parsing)
 function Service.Log(source: string, message: string)
 	print(("[Analytics][%s] %s"):format(source, message))
 end

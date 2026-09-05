@@ -29,25 +29,36 @@ function RemoteBuilder.GetAll(): RemoteTable
 	end
 
 	local lab = getRoot()
-	local folder = Instance.new("Folder")
-	folder.Name = RemoteFolderName
-	folder.Parent = lab
+	local folder = lab:FindFirstChild(RemoteFolderName)
+	if not folder then
+		folder = Instance.new("Folder")
+		folder.Name = RemoteFolderName
+		folder.Parent = lab
+	end
 
 	local defs = require(script.Parent.RemoteDefinitions)
 
 	local fns = {}
 	for name in defs.Functions do
-		local rf = Instance.new("RemoteFunction")
-		rf.Name = name
-		rf.Parent = folder
+		local rf = folder:FindFirstChild(name)
+		if not rf or not rf:IsA("RemoteFunction") then
+			if rf then rf:Destroy() end
+			rf = Instance.new("RemoteFunction")
+			rf.Name = name
+			rf.Parent = folder
+		end
 		fns[name] = rf
 	end
 
 	local evs = {}
 	for name in defs.Events do
-		local re = Instance.new("RemoteEvent")
-		re.Name = name
-		re.Parent = folder
+		local re = folder:FindFirstChild(name)
+		if not re or not re:IsA("RemoteEvent") then
+			if re then re:Destroy() end
+			re = Instance.new("RemoteEvent")
+			re.Name = name
+			re.Parent = folder
+		end
 		evs[name] = re
 	end
 

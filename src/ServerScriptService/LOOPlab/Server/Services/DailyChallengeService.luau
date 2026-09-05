@@ -1,90 +1,102 @@
--- DailyChallengeService: daily rotating challenge. Claims are validated server-side.
--- Objective: play a specific activity N times, or score best N.
+-- DailyChallengeService: date-rotated daily objectives + claim.
 
 local RunService = game:GetService("RunService")
-if RunService:IsClient() then
-	return {}
-end
+if RunService:IsClient() then return {} end
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GameConfig = require(ReplicatedStorage.LOOPlab.Configuration.GameConfig)
-local PlayerData = require(script.Parent.PlayerDataService)
 local RemoteBuilder = require(ReplicatedStorage.LOOPlab.Shared.RemoteBuilder)
-local ES = require(script.Parent.EconomyService)
-local Rewards = require(script.Parent.RewardService)
-local Registry = require(ReplicatedStorage.LOOPlab.Shared.ActivityRegistry)
+local PlayerData = require(script.Parent.PlayerDataService)
+local Analytics = require(script.Parent.AnalyticsService)
+local Poll = require(script.Parent.PollService)
 
 local Service = {}
 local _remotes = RemoteBuilder.GetAll()
 
--- Today's challenge is seeded from the date so all players share it.
-function Service.GetTodayChallenge(): table
-	local osDate = os.date("Y-m-d", os.time())
-	local seed = 0
-	for i = 1, #osDate do seed = seed + string.byte(osDate, i) end
-	local activities = Registry.GetAllIds()
-	local activityId = activities[(seed % #activities) + 1]
-	local objective = GameConfig.Daily.Objectives[(seed % #GameConfig.Daily.Objectives) + 1]
-	return { ActivityId = activityId, Kind = objective.Kind, Target = objective.Min, ProgressMetric = objective.ProgressMetric, Date = osDate }
+local function todayKey()
+	return os.date("!%Y-%m-%d", os.time())
 end
 
-function Service.GetPlayerChallenge(player: Player): table
-	local challenge = Service.GetTodayChallenge()
-	local data = PlayerData.GetForPlayer(player)
-	local entry = data.Daily
-	-- progress tracking: if date mismatch, reset
-	if entry.Date ~= challenge.Date then
-		entry.Date = challenge.Date
-		entry.Progress = 0
-		entry.Claimed = false
-	end
+function Service.GetTodayChallenge(): table
+	local objective = GameConfig.Daily.Objectives[(os.date("!%j") * 7) % #GameConfig.Daily.Objectives + 1]
 	return {
-		ActivityId = challenge.ActivityId,
-		Kind = challenge.Kind,
-		Target = challenge.Target,
-		Progress = entry.Progress or 0,
-		Claimed = entry.Claimed or false,
+		Date = todayKey(),
+		Objective = objective,
 	}
 end
 
--- Called when a player completes an activity in the challenge activity.
-function Service.RecordProgress(player: Player, activityId: string, score: number?)
-	local challenge = Service.GetTodayChallenge()
-	if activityId ~= challenge.ActivityId then return end
+function Service.GetState(player: Player): table
 	local data = PlayerData.GetForPlayer(player)
-	local entry = data.Daily
-	if entry.Date ~= challenge.Date then
-		entry.Date = challenge.Date
-		entry.Progress = 0
-		entry.Claimed = false
+	local t = todayKey()
+	if data.Daily.Date ~= t then
+		data.Daily.Date = t
+		data.Daily.Claimed = false
+		data.Daily.Progress = 0
 	end
-	if entry.Claimed then return end
-	if challenge.Kind == "best_score" and score then
-		entry.Progress = math.max(entry.Progress or 0, score)
-	else
-		entry.Progress = (entry.Progress or 0) + 1
+	local challenge = Service.GetTodayChallenge()
+	return {
+		Date = t,
+		Objective = challenge.Objective,
+		Progress = data.Daily.Progress,
+		Claimed = data.Daily.Claimed,
+	}
+end
+
+function Service.RecordProgress(player: Player, activityId: string, score: number)
+	local data = PlayerData.GetForPlayer(player)
+	local t = todayKey()
+	if data.Daily.Date ~= t then
+		data.Daily.Date = t
+		data.Daily.Progress = 0
+		data.Daily.Claimed = false
 	end
+	if data.Daily.Claimed then return end
+	local objective = Service.GetTodayChallenge().Objective
+	local added = 0
+	if objective.Kind == "complete" then
+		added = 1
+	elseif objective.Kind == "win" and score >= 1 then
+		added = 1
+	elseif objective.Kind == "best_score" then
+		added = score or 0
+	end
+	data.Daily.Progress += added
+	_remotes.Events.Toast:FireClient(player, { message = "Daily progress updated!" })
+	Poll.TrackToast(player, "Daily progress updated!")
+end
+
+function Service.Claim(player: Player): (boolean, string?)
+	local data = PlayerData.GetForPlayer(player)
+	local t = todayKey()
+	if data.Daily.Date ~= t then
+		data.Daily.Date = t
+		data.Daily.Progress = 0
+		data.Daily.Claimed = false
+	end
+	local objective = Service.GetTodayChallenge().Objective
+	if data.Daily.Claimed then
+		return false, "already claimed"
+	end
+	if data.Daily.Progress < (objective.Min or 1) then
+		return false, "not complete"
+	end
+	data.Daily.Claimed = true
+	local Reward = require(script.Parent.RewardService)
+	Reward.GrantDaily(player)
+	Analytics.Fire(player, "DailyClaimed", { a = objective.Kind, b = tostring(data.Daily.Progress) })
+	return true
 end
 
 function Service.Setup()
 	local guard = require(script.Parent.RemoteGuardService)
-	guard.BindFunction(_remotes.Functions.DailyState, function(player: Player)
-		return Service.GetPlayerChallenge(player)
-	end, "DailyState")
-
 	guard.BindFunction(_remotes.Functions.DailyClaim, function(player: Player)
-		local state = Service.GetPlayerChallenge(player)
-		if state.Claimed then return { ok = false, message = "Already claimed" } end
-		local completed = state.Progress >= state.Target
-		if not completed then return { ok = false, message = "Not yet complete" } end
-		local data = PlayerData.GetForPlayer(player)
-		data.Daily.Claimed = true
-		Rewards.GrantDaily(player)
-		local coins = ES.GetCoins(player)
-		local xp = ES.GetXp(player)
-		return { ok = true, coins = coins, xp = xp }
+		return Service.Claim(player)
 	end, "DailyClaim")
+
+	guard.BindFunction(_remotes.Functions.DailyState, function(player: Player)
+		return Service.GetState(player)
+	end, "DailyState")
 end
 
 return Service

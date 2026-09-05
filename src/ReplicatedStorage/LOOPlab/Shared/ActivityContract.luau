@@ -1,30 +1,20 @@
 -- The activity contract: every mini-game MUST implement this API.
 -- ActivityService drives standalone games and Survival rounds through this interface.
--- A new Game #5 must implement this contract + register in ActivityRegistry; no platform rewrite.
 
 local Types = require(script.Parent.Types)
 
--- A Session is created by ActivityService via ActivityDef.Server.Create and represents
--- one round/match instance on the server.
 export type ActivitySession = {
-	-- Set by ActivityService before Create is called:
 	ActivityId: string,
-	Mode: string,           -- "Standalone" | "Survival"
-	Difficulty: string,     -- "Normal" | "Hard" | "Extreme"
-	Duration: number,       -- seconds for this session
-	Players: { Player },    -- participants in order
-	OnUpdate: (any) -> (),  -- push per-player/general state to clients
-	OnResult: (Types.Scoresheet) -> (), -- report round end with ranked rows
-
-	-- Implemented by the game:
+	Mode: string,
+	Difficulty: string,
+	Duration: number,
+	Players: { Player },
+	OnUpdate: (any) -> (),
+	OnResult: (Types.Scoresheet) -> (),
 	Start: (self: ActivitySession) -> (),
 	Cleanup: (self: ActivitySession) -> (),
-	-- Called by ActivityService when the session timer expires; game MUST compute
-	-- its scoresheet and call OnResult before returning.
 	ForceFinish: (self: ActivitySession) -> (),
-	-- Route a player action from the shared ActivityInput remote (optional).
 	HandleInput: ((self: ActivitySession, player: Player, action: string, data: any) -> ())?,
-	-- Server 'Tick' driven by ActivityService for time-limited games; optional.
 	Tick: ((self: ActivitySession, dt: number) -> ())?,
 }
 
@@ -34,20 +24,18 @@ export type ActivityDef = {
 	Description: string,
 	MinPlayers: number,
 	MaxPlayers: number,
-	DurationSeconds: number,   -- standalone
+	DurationSeconds: number,
 	SurvivalDurationSeconds: number,
-	Scoring: string,           -- human-readable
+	Scoring: string,
 	HigherIsBetter: boolean,
 	SupportsStandalone: boolean,
 	SupportsSurvival: boolean,
-	Icon: string?,             -- rbxassetid
+	Icon: string?,
 	Server: {
 		Create: (deps: { ActivityId: string, Mode: string, Difficulty: string, Duration: number, Players: { Player } }) -> ActivitySession,
 		RegisterRemotes: ((remoteTable: { [string]: RemoteEvent | RemoteFunction }, guard: any) -> ())?,
 	},
 	Client: {
-		-- client module receives live updates; optional
-		-- Register(viewRefs): called by MatchController with the HUD frame
 		Register: ((ctx: any) -> ())?,
 	},
 }

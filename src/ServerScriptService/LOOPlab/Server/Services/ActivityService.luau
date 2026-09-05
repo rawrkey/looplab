@@ -1,11 +1,7 @@
 -- ActivityService: orchestrates activity sessions (standalone & survival).
--- Consumes ActivityRegistry. Knows the generic lifecycle: start -> tick -> end -> result.
--- Games implement the ActivityContract; they do NOT know about survival vs standalone.
 
 local RunService = game:GetService("RunService")
-if RunService:IsClient() then
-	return {}
-end
+if RunService:IsClient() then return {} end
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,12 +11,9 @@ local Analytics = require(script.Parent.AnalyticsService)
 
 local ActivityService = {}
 local _remotes = RemoteBuilder.GetAll()
-
--- Sessions being run right now, keyed by session id.
 local _active = {}
+local _lastResults = {}
 
--- Create a new session for a set of players.
--- Returns { sessionId, broadcast, finish } or nil on error.
 function ActivityService.CreateSession(activityId: string, mode: string, difficulty: string, players: { Player })
 	local def = Registry.Get(activityId)
 	if not def then return nil, "unknown activity" end
@@ -32,13 +25,14 @@ function ActivityService.CreateSession(activityId: string, mode: string, difficu
 	local session = {
 		Id = sessionId,
 		ActivityId = activityId,
+		ActivityName = def.Name,
 		Mode = mode,
 		Difficulty = difficulty,
 		Duration = duration,
 		Players = players,
+		Started = os.clock(),
 	}
 
-	-- server-side per-game session instance
 	local ok, gameSession = pcall(def.Server.Create, {
 		ActivityId = activityId,
 		Mode = mode,
@@ -53,7 +47,6 @@ function ActivityService.CreateSession(activityId: string, mode: string, difficu
 
 	session.Game = gameSession
 
-	-- generic broadcast helpers wired into the game session so games don't touch remotes directly
 	gameSession.OnUpdate = function(payload)
 		for _, p in players do
 			_remotes.Events.ActivityUpdate:FireClient(p, payload)
@@ -68,8 +61,6 @@ function ActivityService.CreateSession(activityId: string, mode: string, difficu
 	local started = os.clock()
 	session.Game.Start(session.Game)
 
-	-- Timer: fire Tick requests to the game & auto-end when time is up or the
-	-- game reported a result early (via OnResult).
 	task.spawn(function()
 		while _active[sessionId] do
 			task.wait(0.25)
@@ -93,7 +84,6 @@ function ActivityService.CreateSession(activityId: string, mode: string, difficu
 	return { sessionId = sessionId, session = session, broadcast = _remotes.Events }
 end
 
--- End a session: collect result from game, clean up, return scoresheet.
 function ActivityService.EndSession(sessionId: string)
 	local session = _active[sessionId]
 	if not session then return nil end
@@ -106,8 +96,6 @@ function ActivityService.EndSession(sessionId: string)
 	end
 
 	if not session.Result then
-		-- fallback: never trust a missing report; build a degenerate scoresheet so
-		-- Survival can continue deterministically.
 		local rows = {}
 		for _, p in session.Players do
 			table.insert(rows, { Player = p, Score = 0, Time = os.clock(), Ranks = {} })
@@ -121,22 +109,61 @@ function ActivityService.EndSession(sessionId: string)
 	end
 	local result = session.Result
 	_active[sessionId] = nil
-	return result
-end
 
--- Get sorted scoresheet (rows best-first) from session.
-function ActivityService.GetScoresheet(sessionId)
-	local session = _active[sessionId]
-	if not session then return nil end
-	return session.Result
+	if session.Mode == "Standalone" and result and result.Rows then
+		local winnerId = 0
+		local winnerName = "none"
+		local best = -1
+		for _, row in result.Rows do
+			local score = row.Score or row.Place or 0
+			if score > best then
+				best = score
+				winnerId = row.Player and row.Player.UserId or row.UserId or 0
+				winnerName = row.Player and row.Player.Name or row.Name or "none"
+			end
+		end
+		for _, p in session.Players do
+			_lastResults[p.UserId] = {
+				Mode = "Results",
+				GameMode = "Standalone",
+				ActivityId = session.ActivityId,
+				ActivityName = session.ActivityName or session.ActivityId,
+				Rows = result.Rows,
+				Rewards = {},
+				WinnerUserId = winnerId,
+				WinnerName = winnerName,
+			}
+		end
+	end
+
+	return result
 end
 
 function ActivityService.IsActive(sessionId)
 	return _active[sessionId] ~= nil
 end
 
--- Bind the shared ActivityInput remote: routes to whichever active session the
--- player is in. Games receive (player, action, data) through session.HandleInput.
+function ActivityService.GetClientSync(player)
+	for id, session in pairs(_active) do
+		if session.Mode == "Standalone" then
+			for _, p in session.Players do
+				if p == player then
+					return {
+						Mode = "Standalone",
+						Phase = "Running",
+						Round = 1,
+						TotalRounds = 1,
+						ActivityId = session.ActivityId,
+						ActivityName = session.ActivityName or session.ActivityId,
+						TimeLeft = math.max(0, session.Duration - (os.clock() - session.Started)),
+					}
+				end
+			end
+		end
+	end
+	return _lastResults[player.UserId]
+end
+
 local _routed = false
 function ActivityService.Setup()
 	if _routed then return end
@@ -144,7 +171,6 @@ function ActivityService.Setup()
 	local guard = require(script.Parent.RemoteGuardService)
 	guard.BindEvent(_remotes.Events.ActivityInput, function(player: Player, activityId: any, action: any, data: any)
 		if type(activityId) ~= "string" or type(action) ~= "string" then return end
-		if not guard.Sane(data) then return end
 		for id, session in pairs(_active) do
 			if session.ActivityId == activityId then
 				for _, p in session.Players do

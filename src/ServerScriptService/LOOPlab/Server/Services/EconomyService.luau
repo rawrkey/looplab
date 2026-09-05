@@ -1,13 +1,10 @@
 -- EconomyService: the ONLY writer of coins/XP in the game. Server-authoritative.
--- All rewards flow through RewardService -> EconomyService -> PlayerDataService.
 
 local RunService = game:GetService("RunService")
-if RunService:IsClient() then
-	return {}
-end
+if RunService:IsClient() then return {} end
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
 local GameConfig = require(ReplicatedStorage.LOOPlab.Configuration.GameConfig)
 local PlayerData = require(script.Parent.PlayerDataService)
 local RemoteBuilder = require(ReplicatedStorage.LOOPlab.Shared.RemoteBuilder)
@@ -23,7 +20,6 @@ local function pushUpdate(userId: number)
 	_remotes.Events.EconomyUpdate:FireClient(player, { Coins = data.Coins, Xp = data.Xp, Level = level })
 end
 
--- Compute level from xp using the level curve.
 function Economy.GetLevelFromXp(xp: number): number
 	local curve = GameConfig.Xp.LevelCurve
 	local level = 1
@@ -34,7 +30,6 @@ function Economy.GetLevelFromXp(xp: number): number
 	return math.min(level, GameConfig.Xp.MaxLevel)
 end
 
--- Add coins (positive or negative). Returns new balance.
 function Economy.AddCoins(player: Player, amount: number): number
 	local data = PlayerData.GetForPlayer(player)
 	data.Coins = math.max(0, data.Coins + amount)
@@ -51,9 +46,7 @@ end
 
 function Economy.SpendCoins(player: Player, amount: number): boolean
 	local data = PlayerData.GetForPlayer(player)
-	if data.Coins < amount then
-		return false
-	end
+	if data.Coins < amount then return false end
 	data.Coins -= amount
 	pushUpdate(player.UserId)
 	return true

@@ -1,5 +1,4 @@
 -- LOOPLAB server bootstrap. Starts all services in dependency order.
--- Idempotent: safe guard against double-run.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -13,6 +12,7 @@ end
 _G.LOOPLAB_BOOTSTRAPPED = true
 
 local SSS = game:GetService("ServerScriptService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local lab = SSS:WaitForChild("LOOPlab", 60)
 local server = lab:WaitForChild("Server", 60)
 local servicesFolder = server:WaitForChild("Services", 60)
@@ -56,9 +56,10 @@ startService("QueueService")
 startService("SpectatorService")
 startService("SurvivalMatchService")
 startService("RewardService")
+startService("PollService")
 
 -- register activities
-local registry = require(script.Parent.Parent.Parent.Parent.Parent.Parent.Shared.ActivityRegistry)
+local registry = require(ReplicatedStorage:WaitForChild("LOOPlab").Shared.ActivityRegistry)
 for _, child in activitiesFolder:GetChildren() do
 	if child:IsA("ModuleScript") then
 		registry.Register(child)

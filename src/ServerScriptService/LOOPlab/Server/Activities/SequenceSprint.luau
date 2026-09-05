@@ -1,206 +1,166 @@
--- Sequence Sprint: mirror the server's button sequence, as fast as possible.
--- Server is authoritative for sequence + progress. Wrong press = reset progress
--- for that sequence (no elimination). Score = correct presses (higher = better).
+-- SequenceSprint: repeat the shown sequence as it grows.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace = game:GetService("Workspace")
+local Contract = require(ReplicatedStorage.LOOPlab.Shared.ActivityContract)
 
-local ActivityDef = {
+local Activity = {
 	Id = "sequence_sprint",
 	Name = "Sequence Sprint",
-	Description = "Mirror the flashes, watch the clock.",
+	Description = "Memorize and repeat the sequence!",
 	MinPlayers = 1,
 	MaxPlayers = 12,
-	DurationSeconds = 120,
-	SurvivalDurationSeconds = 75,
-	Scoring = "Correct presses",
+	DurationSeconds = 45,
+	SurvivalDurationSeconds = 45,
+	Scoring = "HigherIsBetter",
 	HigherIsBetter = true,
 	SupportsStandalone = true,
 	SupportsSurvival = true,
 }
 
-local BUTTONS = 4
 local BASE_LENGTH = 3
-local SHOW_TIME = 1.2 -- seconds the flash prompt is shown before input allowed
+local MAX_LENGTH = 12
+local SHOW_TIME = 1.2
+local INPUT_WINDOW = 6
+local PADS = { "A", "B", "C", "D" }
 
-local function rootOf(player)
-	local char = player.Character
-	if not char then return nil end
-	return char:FindFirstChild("HumanoidRootPart"), char:FindFirstChildOfClass("Humanoid")
+local Session = {}
+Session.__index = Session
+
+local function newSession(deps)
+	local self = setmetatable({}, Session)
+	self.ActivityId = deps.ActivityId
+	self.Mode = deps.Mode
+	self.Players = deps.Players
+	self.Duration = deps.Duration
+	self.States = {}
+	self.Finished = false
+	return self
 end
 
-ActivityDef.Server = {
+local function makePad(self, index)
+	local pad = Instance.new("Part")
+	pad.Anchored = true
+	pad.Size = Vector3.new(5, 1, 5)
+	pad.Position = Vector3.new((index - 1) * 7 - 10, 1, -20)
+	pad.Material = Enum.Material.Neon
+	pad.Color = Color3.fromRGB(60, 150, 220)
+	pad.Name = "Pad" .. PADS[index]
+	pad:SetAttribute("Pad", PADS[index])
+	pad.Parent = workspace
+	table.insert(self.Pads, pad)
+	return pad
+end
+
+local function showSequence(self, player, seq)
+	self.OnUpdate({ Kind = "Activity", ActivityId = self.ActivityId, Data = { Phase = "show", Sequence = seq, PadCount = #self.Pads } })
+	task.wait(SHOW_TIME * #seq)
+end
+
+local function nextRound(self, player)
+	local state = self.States[player.UserId]
+	local len = math.min(state.Round + BASE_LENGTH - 1, MAX_LENGTH)
+	local seq = {}
+	for i = 1, len do
+		seq[i] = PADS[math.random(1, #PADS)]
+	end
+	state.Sequence = seq
+	state.Index = 1
+	state.Waiting = true
+	state.RoundTimeout = os.clock() + INPUT_WINDOW
+	showSequence(self, player, seq)
+	self.OnUpdate({ Kind = "Activity", ActivityId = self.ActivityId, Data = { Phase = "input", Length = len, PadCount = #self.Pads } })
+end
+
+function Session:Start()
+	self.Pads = {}
+	for i = 1, #PADS do
+		makePad(self, i)
+	end
+	for _, player in self.Players do
+		self.States[player.UserId] = { Round = 1, Score = 0, Waiting = false, Index = 1, Sequence = {}, RoundTimeout = 0 }
+		local char = player.Character or player.CharacterAdded:Wait()
+		if char then
+			local hrp = char:WaitForChild("HumanoidRootPart", 5)
+			if hrp then
+				hrp.CFrame = CFrame.new(0, 8, 0)
+			end
+		end
+	end
+	self.StartedAt = os.clock()
+	for _, p in self.Players do
+		self.OnUpdate({ Kind = "MatchState", Mode = self.Mode, ActivityId = self.ActivityId, Phase = "running", TimeLeft = self.Duration, Message = "Watch and repeat!" })
+		nextRound(self, p)
+	end
+end
+
+function Session:HandleInput(player, action, data)
+	if self.Finished then return end
+	local state = self.States[player.UserId]
+	if not state or not state.Waiting then return end
+	if action ~= "press" then return end
+	if not data or type(data) ~= "string" then return end
+	if data ~= state.Sequence[state.Index] then
+		state.Waiting = false
+		state.Score = math.max(0, state.Score - 1)
+		self.OnUpdate({ Kind = "Activity", ActivityId = self.ActivityId, Data = { Phase = "wrong", Score = state.Score } })
+		self.OnUpdate({ Kind = "MatchState", Mode = self.Mode, ActivityId = self.ActivityId, Phase = "running", TimeLeft = math.max(0, self.Duration - (os.clock() - self.StartedAt)), Message = "Wrong!" })
+		state.Index = 1
+		nextRound(self, player)
+		return
+	end
+	state.Index += 1
+	if state.Index > #state.Sequence then
+		state.Waiting = false
+		local add = #state.Sequence
+		state.Score += add * 10
+		state.Round += 1
+		self.OnUpdate({ Kind = "Activity", ActivityId = self.ActivityId, Data = { Phase = "correct", Score = state.Score } })
+		nextRound(self, player)
+	end
+end
+
+function Session:Tick(dt)
+	local done = true
+	for _, p in self.Players do
+		local state = self.States[p.UserId]
+		if state and state.Waiting == false then done = false end
+	end
+	return
+end
+
+function Session:Finish()
+	if self.Finished then return end
+	self.Finished = true
+	local rows = {}
+	for _, p in self.Players do
+		local s = self.States[p.UserId]
+		table.insert(rows, { Player = p, Score = s.Score, Time = (os.clock() - self.StartedAt), Ranks = { [self.ActivityId] = s.Score } })
+	end
+	table.sort(rows, function(a, b) return a.Score > b.Score end)
+	self.OnResult({ ActivityId = self.ActivityId, Mode = self.Mode, Duration = self.Duration, Rows = rows })
+end
+
+function Session:ForceFinish()
+	self:Finish()
+end
+
+function Session:Cleanup()
+	for _, p in self.Pads do
+		if p.Parent then p:Destroy() end
+	end
+	for _, player in self.Players do
+		local char = player.Character
+		if char then
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then hrp.CFrame = CFrame.new(0, 10, 0) end
+		end
+	end
+end
+
+Activity.Server = {
 	Create = function(deps)
-		local duration = deps.Duration
-		local players = deps.Players
-		local state = {
-			elapsed = 0,
-			done = false,
-			sequence = {},      -- per player current sequence (array of 1..BUTTONS)
-			progress = {},      -- per player index into sequence
-			correct = {},       -- per player total correct count (the score)
-			round = 1,
-			phase = "show",     -- "show" | "input"
-			phaseUntil = 0,
-			lastUpdate = 0,
-			folder = nil,
-		}
-
-		local session = {}
-		session.OnUpdate = deps.OnUpdate
-		session.OnResult = deps.OnResult
-
-		local folder = Instance.new("Folder")
-		folder.Name = "LOOPLAB_SequenceSprint_" .. tostring(os.time() + math.random(1, 9999))
-		folder.Parent = Workspace
-		state.folder = folder
-
-		-- spawn players around a circle
-		for i, p in players do
-			local ang = (i / math.max(1, #players)) * math.pi * 2
-			task.delay(0.4, function()
-				local root, hum = rootOf(p)
-				if root then
-					root.CFrame = CFrame.new(math.cos(ang) * 10, 2.5, math.sin(ang) * 10)
-					hum.WalkSpeed = 10
-				end
-			end)
-		end
-
-		local function newSequence(p)
-			local len = BASE_LENGTH + math.floor(state.correct[p.UserId] / 6)
-			len = math.min(len, 12)
-			local seq = {}
-			for i = 1, len do
-				seq[i] = math.random(1, BUTTONS)
-			end
-			state.sequence[p.UserId] = seq
-			state.progress[p.UserId] = 0
-		end
-
-		-- generate initial sequences and start the show phase
-		for _, p in players do
-			newSequence(p)
-		end
-		state.phase = "show"
-		state.phaseUntil = os.clock() + SHOW_TIME
-		state.roundStart = os.clock()
-
-		local function broadcast()
-			local progress = {}
-			for uid, idx in pairs(state.progress) do progress[tostring(uid)] = idx end
-			local correct = {}
-			for uid, c in pairs(state.correct) do correct[tostring(uid)] = c end
-			session.OnUpdate({
-				Phase = state.phase,
-				Kind = "sequence_sprint",
-				Round = state.round,
-				TimeLeft = math.max(0, math.floor(duration - state.elapsed)),
-				-- Only send sequence to the client during show phase; everyone gets it.
-				Sequence = (state.phase == "show") and state.sequence or nil,
-				Progress = progress,
-				Correct = correct,
-				ShowUntil = state.phaseUntil,
-			})
-		end
-
-		local function finish()
-			if state.done then return end
-			state.done = true
-			local rows = {}
-			for _, p in players do
-				table.insert(rows, {
-					Player = p,
-					Score = state.correct[p.UserId] or 0,
-					Time = state.elapsed,
-					Ranks = { round = state.round },
-				})
-			end
-			table.sort(rows, function(a, b)
-				if a.Score ~= b.Score then return a.Score > b.Score end
-				return a.Time < b.Time
-			end)
-			session.OnResult({
-				ActivityId = ActivityDef.Id,
-				Mode = deps.Mode,
-				Duration = duration,
-				Rows = rows,
-			})
-		end
-
-		session.Start = function()
-			state.lastUpdate = os.clock()
-			pcall(broadcast)
-		end
-
-		session.Tick = function(_, dt)
-			if state.done then return end
-			state.elapsed += dt
-			local now = os.clock()
-
-			if state.phase == "show" and now >= state.phaseUntil then
-				state.phase = "input"
-				pcall(broadcast)
-			end
-
-			-- everyone who finished their sequence gets a new round
-			local allDone = true
-			local anyone = #players > 0
-			for _, p in players do
-				if p.Parent then
-					local idx = state.progress[p.UserId] or 0
-					local seq = state.sequence[p.UserId]
-					if seq and idx < #seq then allDone = false end
-				end
-			end
-			if anyone and allDone then
-				state.round += 1
-				for _, p in players do
-					if p.Parent then newSequence(p) end
-				end
-				state.phase = "show"
-				state.phaseUntil = os.clock() + SHOW_TIME
-			end
-
-			if state.elapsed - state.lastUpdate >= 0.25 then
-				state.lastUpdate = state.elapsed
-				pcall(broadcast)
-			end
-		end
-
-		session.HandleInput = function(_, player, action, data)
-			if state.done then return end
-			if action ~= "press" then return end
-			if state.phase ~= "input" then return end
-			local idx = data
-			if type(idx) ~= "number" then
-				if type(data) == "table" then idx = data.idx end
-			end
-			if type(idx) ~= "number" then return end
-			if idx < 1 or idx > BUTTONS then return end
-			local uid = player.UserId
-			local seq = state.sequence[uid]
-			if not seq then return end
-			local expected = seq[(state.progress[uid] or 0) + 1]
-			if idx == expected then
-				state.progress[uid] = (state.progress[uid] or 0) + 1
-				state.correct[uid] = (state.correct[uid] or 0) + 1
-			else
-				-- reset this sequence (no elimination)
-				state.progress[uid] = 0
-			end
-		end
-
-		session.ForceFinish = function()
-			finish()
-		end
-
-		session.Cleanup = function()
-			if state.folder then state.folder:Destroy(); state.folder = nil end
-		end
-
-		return session
+		return newSession(deps)
 	end,
 }
 
-return ActivityDef
+return Activity

@@ -1,86 +1,101 @@
--- CosmeticService: read/write equipped cosmetics + purchase. Server-authoritative.
--- Cosmetics are cosmetic only; no power. Purchases validated against GameConfig catalog.
+-- CosmeticService: catalog, ownership, equip/unequip, purchase.
 
 local RunService = game:GetService("RunService")
-if RunService:IsClient() then
-	return {}
-end
+if RunService:IsClient() then return {} end
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GameConfig = require(ReplicatedStorage.LOOPlab.Configuration.GameConfig)
+local RemoteBuilder = require(ReplicatedStorage.LOOPlab.Shared.RemoteBuilder)
 local PlayerData = require(script.Parent.PlayerDataService)
 local Economy = require(script.Parent.EconomyService)
-local RemoteBuilder = require(ReplicatedStorage.LOOPlab.Shared.RemoteBuilder)
 local Analytics = require(script.Parent.AnalyticsService)
 
 local Service = {}
 local _remotes = RemoteBuilder.GetAll()
 
-local function findCosmetic(id)
-	for _, c in GameConfig.Cosmetics do
-		if c.Id == id then return c end
+local function catalog()
+	return GameConfig.Cosmetics
+end
+
+function Service.GetCatalog(): table
+	return catalog()
+end
+
+function Service.GetOwned(player: Player): table
+	return PlayerData.GetForPlayer(player).OwnedCosmetics or {}
+end
+
+function Service.Equip(player: Player, itemId: string): (boolean, string?)
+	local data = PlayerData.GetForPlayer(player)
+	local owned = data.OwnedCosmetics or {}
+	if not owned[itemId] then
+		local item = nil
+		for _, c in catalog() do
+			if c.Id == itemId then item = c break end
+		end
+		if not item then return false, "not found" end
+		if item.Price > 0 then return false, "not owned" end
+		-- free items auto-owned
+		owned[itemId] = true
 	end
-	return nil
-end
-
-function Service.Owns(player: Player, id: string): boolean
-	local data = PlayerData.GetForPlayer(player)
-	return data.OwnedCosmetics[id] == true
-end
-
-function Service.Equip(player: Player, category: string, id: string): boolean
-	local cosmetic = findCosmetic(id)
-	if not cosmetic then return false end
-	if cosmetic.Category ~= category then return false end
-	if not Service.Owns(player, id) then return false end
-	local data = PlayerData.GetForPlayer(player)
-	data.Equipped[category] = id
+	local category = ""
+	for _, c in catalog() do
+		if c.Id == itemId then category = c.Category break end
+	end
+	if not data.Equipped then data.Equipped = {} end
+	data.Equipped[category] = itemId
 	return true
 end
 
-function Service.Unequip(player: Player, category: string): boolean
+function Service.Unequip(player: Player, itemId: string): boolean
 	local data = PlayerData.GetForPlayer(player)
-	local known = false
-	for _, c in GameConfig.Cosmetics do
-		if c.Category == category then known = true break end
+	local category = ""
+	for _, c in catalog() do
+		if c.Id == itemId then category = c.Category break end
 	end
-	if not known then return false end
-	data.Equipped[category] = nil
+	if category == "" then return false end
+	if data.Equipped and data.Equipped[category] == itemId then
+		data.Equipped[category] = nil
+	end
 	return true
 end
 
-function Service.Buy(player: Player, id: string)
-	local cosmetic = findCosmetic(id)
-	if not cosmetic or cosmetic.Price <= 0 or cosmetic.Price == nil then
-		return { ok = false, message = "Not purchasable" }
-	end
-	if Service.Owns(player, id) then
-		return { ok = false, message = "Already owned" }
-	end
-	if not Economy.SpendCoins(player, cosmetic.Price) then
-		return { ok = false, message = "Not enough coins" }
-	end
+function Service.Buy(player: Player, itemId: string): (boolean, string?)
 	local data = PlayerData.GetForPlayer(player)
-	data.OwnedCosmetics[id] = true
-	Analytics.Fire(player, "Purchase", { a = id, b = tostring(cosmetic.Price) })
-	return { ok = true, coins = Economy.GetCoins(player) }
+	if data.OwnedCosmetics and data.OwnedCosmetics[itemId] then
+		return false, "already owned"
+	end
+	local item = nil
+	for _, c in catalog() do
+		if c.Id == itemId then item = c break end
+	end
+	if not item then return false, "not found" end
+	if item.Price <= 0 then return false, "free item" end
+	if not Economy.SpendCoins(player, item.Price) then
+		return false, "not enough coins"
+	end
+	if not data.OwnedCosmetics then data.OwnedCosmetics = {} end
+	data.OwnedCosmetics[itemId] = true
+	Analytics.Fire(player, "CosmeticPurchased", { a = itemId, b = tostring(item.Price) })
+	return true
 end
 
 function Service.Setup()
 	local guard = require(script.Parent.RemoteGuardService)
-	guard.BindFunction(_remotes.Functions.CosmeticEquip, function(player: Player, category: any, id: any)
-		if type(category) ~= "string" or type(id) ~= "string" then return nil end
-		return Service.Equip(player, category, id)
+	guard.BindFunction(_remotes.Functions.CosmeticEquip, function(player: Player, itemId: any)
+		if type(itemId) ~= "string" then return false, "bad arg" end
+		return Service.Equip(player, itemId)
 	end, "CosmeticEquip")
 
-	guard.BindFunction(_remotes.Functions.CosmeticUnequip, function(player: Player, category: any)
-		if type(category) ~= "string" then return nil end
-		return Service.Unequip(player, category)
+	guard.BindFunction(_remotes.Functions.CosmeticUnequip, function(player: Player, itemId: any)
+		if type(itemId) ~= "string" then return false end
+		return Service.Unequip(player, itemId)
 	end, "CosmeticUnequip")
 
-	guard.BindFunction(_remotes.Functions.CosmeticBuy, function(player: Player, id: any)
-		if type(id) ~= "string" then return nil end
-		return Service.Buy(player, id)
+	guard.BindFunction(_remotes.Functions.CosmeticBuy, function(player: Player, itemId: any)
+		if type(itemId) ~= "string" then return false, "bad arg" end
+		return Service.Buy(player, itemId)
 	end, "CosmeticBuy")
 end
 

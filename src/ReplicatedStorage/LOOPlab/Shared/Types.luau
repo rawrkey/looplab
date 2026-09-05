@@ -4,36 +4,33 @@ export type ActivityId = string
 export type Mode = "Standalone" | "Survival"
 export type Difficulty = "Normal" | "Hard" | "Extreme"
 
--- A placement/scoresheet entry produced by an activity at round end.
 export type Placement = {
 	Player: Player,
-	Score: number,      -- raw score (higher = better, as defined by activity)
-	Time: number,       -- seconds (server wall clock) from round start; used for ordering
-	Ranks: { [string]: number }, -- activity-specific tiebreaker dimensions, higher=better
+	Score: number,
+	Time: number,
+	Ranks: { [string]: number },
 }
 
 export type RoundResult = {
 	ActivityId: ActivityId,
 	StartedAt: number,
-	Injections: { [Player]: any }, -- per-player result details
+	Injections: { [Player]: any },
 }
 
--- Full scoresheet for one activity session: players ordered best-first.
 export type Scoresheet = {
 	ActivityId: ActivityId,
 	Mode: Mode,
 	Duration: number,
-	Rows: { Placement }, -- pre-sorted best first
+	Rows: { Placement },
 }
 
--- Broadcast payloads (server -> client)
 export type QueueUpdatePayload = {
 	Kind: "QueueUpdate",
 	Mode: Mode,
 	ActivityId: ActivityId?,
 	Queued: number,
 	Target: number,
-	Phase: string, -- "waiting" | "countdown" | "live"
+	Phase: string,
 	TimeLeft: number?,
 	SessionId: string?,
 }
@@ -42,14 +39,14 @@ export type MatchStatePayload = {
 	Kind: "MatchState",
 	Mode: Mode,
 	ActivityId: ActivityId,
-	Phase: string, -- "intro" | "active" | "ending"
+	Phase: string,
 	Duration: number,
 	TimeLeft: number,
-	Survivors: { [string]: number }, -- userId -> rank/score (keyed by user id for HUD)
-	MyRaw?: number,
+	Survivors: { [string]: number },
+	MyRaw: number?,
 	Message: string,
-	Round?: number,
-	TotalRounds?: number,
+	Round: number?,
+	TotalRounds: number?,
 }
 
 export type EliminationPayload = {
@@ -90,4 +87,4 @@ export type PlayerCountsPayload = {
 	Counts: { [string]: number },
 }
 
-return {} :: typeof(nil) -- type-only module
+return {} :: typeof(nil)

@@ -2,9 +2,9 @@
 
 > Source of truth for the technical structure. The Roblox Studio project (Place1)
 > started as a clean SuperTemplate baseplate with **no existing scripts, folders,
-> remotes, or UI**. This document defines the target architecture. Systems are
-> introduced incrementally per milestone — **this document describes the target
-> design, not everything built today.**
+> remotes, or UI**. The full MVP architecture described below is **built and
+> playtested** as of v2. Studio is the live truth; the repo (`src/`) mirrors it
+> 1:1 via Rojo.
 
 ---
 
@@ -29,33 +29,40 @@ ROBLOX PROJECT (Place: Place1 / 95206881)
 ├── ServerScriptService
 │   └── LOOPlab
 │       └── Server
-│           └── Services            (server-authoritative service scripts/mods)
+│           ├── Services            (server-authoritative service modules)
+│           ├── Activities          (mini-game modules registered into ActivityRegistry)
+│           └── Bootstrap           (Script — starts services in dependency order)
 │
 ├── ReplicatedStorage
 │   └── LOOPlab
-│       ├── Shared                  (shared modules used by server + client)
-│       ├── Configuration           (centralized config, e.g. GameConfig)
-│       └── Remotes                 (RemoteEvents/RemoteFunctions live here)
+│       ├── Shared                  (Types, ActivityContract, ActivityRegistry,
+│       │                            RemoteDefinitions, RemoteBuilder)
+│       ├── Configuration           (GameConfig — centralized tunables)
+│       └── Remotes                 (Runtime-created by RemoteBuilder; single flat
+│                                    folder of RemoteEvents/RemoteFunctions)
 │
 ├── StarterPlayer
 │   └── StarterPlayerScripts
 │       └── LOOPlab
-│           └── Client              (client controllers / UI logic)
+│           └── Client
+│               ├── Bootstrap       (LocalScript — builds UI + runs poll loop)
+│               ├── Components      (Screens/*, ViewController, UIKit, Theme,
+│               │                    EffectsService, AudioService)
+│               └── Controllers     (Hub, Queue, Match, Spectator, Progression,
+│                                    Leaderboard)
 │
-├── StarterGui
-│   └── LOOPlab
-│       └── UI                      (screen GUIs and UI components)
-│
-└── Workspace / Lighting / etc.     (scene content — hub built in later milestones)
+└── Workspace / Lighting / etc.     (scene content)
 ```
 
-Naming conventions:
+Notes:
 
-- Root containers are named `LOOPlab` (project prefix) to avoid collisions and
-  clearly mark ownership.
-- Scripts: PascalCase. Modules: PascalCase. Folders: PascalCase.
-- Remote names: `Remote`-born; single source of the remote wiring in
-  `Shared/Remotes` module (RemoteGuardService target design).
+- **UI is built at runtime**, not stored in StarterGui. `Client/Bootstrap`
+  creates one `ScreenGui` (background panel + 8 screens) inside `PlayerGui`.
+- **Remotes are created at runtime** by `RemoteBuilder` from
+  `RemoteDefinitions` (idempotent, single flat `Remotes` folder).
+- Naming: root containers are `LOOPlab`; scripts/modules/folders PascalCase;
+  remote names defined only in `RemoteDefinitions`. Component source uses the
+  Rojo mapping `src/<Service>/<LOOPlab path>/...`.
 
 ---
 
@@ -89,15 +96,35 @@ Naming conventions:
     │   (rate-limited + validated by RemoteGuardService on server)
     ▼
 [Server services] validate → execute (EconomyService etc.) → persist via
-PlayerDataService → compute authoritative results
+PlayerDataService → compute authoritative results, buffer into PollService
     │
     ▼
-[Server] broadcasts result to relevant clients (RemoteEvent)
+[Client] polls PollActivity RemoteFunction every ~0.45s (v2 sync)
     ▼
 [Client controllers] update UI
     ▲
-[AnalyticsService] records funnel/engagement events (both sides may emit)
+[AnalyticsService] records funnel/engagement events (server + client)
 ```
+
+### 4.1 Sync strategy (v2): poll + event
+
+Studio play (no networking job) breaks `RemoteEvent/BindableEvent` signal
+delivery client-side. `PollService` is therefore the **sync backbone**:
+
+- Every client runs a poll loop from `Client/Bootstrap` calling
+  `Remotes.Functions.PollActivity` (RemoteFunction) on an interval that stays
+  under `RemoteGuardService`'s per-remote throttle.
+- `PollActivity` returns a single payload:
+  `{ Activity = <current snapshot or nil>, Economy = {Coins, Xp, Level},
+  Toasts = {{message}} }`.
+- `Activity` has a `Mode`: `"Queue" | "Standalone" | "Survival"` (with
+  `Phase`: `Lobby | Countdown | Running | Aborted`) | `"Results"`.
+- The server **also fires** RemoteEvents for production use; the poll path is
+  fallback-equivalent and what's exercised in playtests.
+- Controllers (Queue/Match/Progression) translate payloads into UI updates;
+  broadcast-style events are consumed when present, poll updates otherwise.
+- Rate is tuned in `GameConfig` (see `Remotes`/`Poll`); exceeding the guard's
+  throttle returns errors, so the client never spams faster than configured.
 
 ---
 
@@ -157,15 +184,20 @@ Pending → Countdown → Active → Ending → Rewards → Done (back to hub/ne
 
 ## 8. Remote Communication
 
-- All remotes live under `ReplicatedStorage.LOOPlab.Remotes` as
-  RemoteEvents/RemoteFunctions, referenced by a central definitions module.
-- **RemoteGuardService** (target design) provides:
-  - Server-side validation of every remote payload.
-  - Rate limiting / throttling (per player, per remote).
-  - Rejection logging (feeds analytics/anti-exploit).
-- Convention: prefer RemoteFunction for request/response, RemoteEvent for
-  one-way authoritative broadcasts and low-risk intents. Use the strictest
-  mechanism that fits.
+- `RemoteBuilder` (Shared) creates every remote at runtime, idempotently, from
+  `RemoteDefinitions` (Shared) into a single flat
+  `ReplicatedStorage.LOOPlab.Remotes` folder.
+- `RemoteGuardService` (Server) wraps every remote:
+  - Server-side validation of every payload.
+  - Rate limiting / throttling (per player, per remote) — e.g. a 15-call window
+    per 5s.
+  - Rejection logging (feeds analytics / anti-exploit).
+- Convention: RemoteFunction for request/response (QueueJoin, QueueLeave,
+  PollActivity, ProfileFetch, DailyState, DailyClaim, LeaderboardFetch,
+  SettingsSet), RemoteEvent for authoritative broadcasts (ActivityStart,
+  ActivityUpdate, RoundEnd, MatchResult, Economy). The strictest mechanism wins.
+- The poll loop rate is the only client traffic that must survive throttling;
+  it is configured in `GameConfig.Remotes.Poll`.Interval.
 
 ---
 
@@ -255,38 +287,58 @@ Pending → Countdown → Active → Ending → Rewards → Done (back to hub/ne
    picks it up automatically.
 6. No rewriting of platform systems required.
 
-This is the target contract. Milestone 0 creates only the folders + GameConfig;
-the registry contract is finalized when ActivityService is built.
+This is the contract v2. New activities register their module under
+`Server/Activities` and declare metadata in `ActivityRegistry`; the platform
+(hub, queue, survival rounds, rewards) picks them up automatically.
 
 ---
 
-## 18. Target Services (conceptual inventory)
+## 18. Services (built inventory)
 
 | Service | Layer | Purpose |
 |---|---|---|
-| PlayerDataService | Server | Load/save/version player data |
-| EconomyService | Server | XP/coins/currency authority |
+| PlayerDataService | Server | Load/save/version player data (SchemaVersion) |
+| EconomyService | Server | XP/coins/level authority + grant |
 | ActivityService | Server | Activity lifecycle orchestration |
-| ActivityRegistry | Shared/Server | Activity metadata + registration |
-| RecommendationService | Server | Next-activity suggestions |
-| PartyService | Server | Party/friend grouping |
+| QueueService | Server | Queue/lobby management → match launch |
+| SurvivalMatchService | Server | Survival round orchestration + eliminations |
+| DailyChallengeService | Server | Daily XP-bonus challenge |
+| PollService | Server | Per-player activity snapshot for the v2 poll sync |
 | RewardService | Server | Authoritative reward issuance |
+| LeaderboardService | Server | Scoreboard entries per board |
+| CosmeticService | Server | Cosmetic catalog / owned cosmetics |
+| MonetizationService | Server | Purchases (cosmetics; shell) |
+| SpectatorService | Server | Survivor/eliminated tracking for spectating |
 | AnalyticsService | Server+Client | Telemetry/analytics events |
-| MonetizationService | Server | Purchases (cosmetics) |
-| ContentRegistry | Shared/Server | Content/cosmetic catalog + registration |
 | RemoteGuardService | Server | Remote validation + rate limiting |
+| ActivityRegistry | Shared | Activity metadata + registration (all 4 games) |
+| RemoteBuilder / RemoteDefinitions | Shared | Runtime remote creation from the single contract |
+| GameConfig | Configuration | All tunables (rewards, timings, economy, remotes) |
+| ViewController + UIKit + Theme | Client | Runtime-built UI: 8 screens, styling, brand |
+| Bootstraps (Server/Client) | Both | Dependency-ordered startup + poll loop |
 
-**Status:** These are target designs. Per project rules, systems are created
-**only when a milestone needs them** — never "just because they appear in the
-PRD." Milestone 0 creates only folders + GameConfig.
+**Not built (target only):** RecommendationService, PartyService,
+ContentRegistry. Built systems remain server-authoritative; UI is presentation
+only.
 
 ---
 
-## 19. Milestone 0 State (what exists NOW)
+## 19. Current State (v2)
 
-- Local repo `Projects/looplab` with `docs/`.
-- In-Studio scaffolding: `LOOPlab` container folders under ServerScriptService,
-  ReplicatedStorage, StarterPlayerScripts, StarterGui.
-- `ReplicatedStorage.LOOPlab.Configuration.GameConfig` ModuleScript
-  (centralized config/version).
-- **No services, no remotes, no economy, no gameplay code yet.**
+- **Repo** `Projects/looplab` with `src/` mirroring Studio 1:1 (Rojo) and
+  `docs/`.
+- **Server** (`ServerScriptService.LOOPlab.Server`): `Services/` (13 modules +
+  RemoteGuardService), `Activities/` (ChaosRun, DodgeLab, BuildBlitz,
+  SequenceSprint), `Bootstrap` Script.
+- **Shared** (`ReplicatedStorage.LOOPlab`): `Shared/` (Types, ActivityContract,
+  ActivityRegistry, RemoteDefinitions, RemoteBuilder), `Configuration/`
+  (GameConfig), runtime `Remotes/`.
+- **Client** (`StarterPlayerScripts.LOOPlab.Client`): `Bootstrap` LocalScript,
+  `Components/` (8 Screens + ViewController, UIKit, Theme, EffectsService,
+  AudioService), `Controllers/` (Hub, Queue, Match, Spectator, Progression,
+  Leaderboard). UI is built into a single runtime ScreenGui under PlayerGui.
+- **Sync:** poll-based fallback via PollService (v2), RemoteEvents fire for
+  production; playtested end-to-end (standalone + solo survival → Results,
+  coins/XP awarded, victory overlay).
+- **Remaining:** Datastore-backed leaderboards/dailies confirmed, cosmetics
+  catalog + purchase flow, in-Studio multiplayer verification.

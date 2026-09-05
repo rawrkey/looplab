@@ -1,28 +1,21 @@
 -- RewardService: computes and grants rewards from validated match outcomes.
--- Never trusts the client. Uses EconomyService (sole writer) for coins/XP.
--- Supports: standalone placements, survival round survival, win, daily challenge, cosmetic unlocks.
 
 local RunService = game:GetService("RunService")
-if RunService:IsClient() then
-	return {}
-end
+if RunService:IsClient() then return {} end
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GameConfig = require(ReplicatedStorage.LOOPlab.Configuration.GameConfig)
 local Economy = require(script.Parent.EconomyService)
 local PlayerData = require(script.Parent.PlayerDataService)
 local Analytics = require(script.Parent.AnalyticsService)
 local RemoteBuilder = require(ReplicatedStorage.LOOPlab.Shared.RemoteBuilder)
+local Poll = require(script.Parent.PollService)
 
 local Rewards = {}
 local _remotes = RemoteBuilder.GetAll()
+local _grantedKeys = {}
 
--- Dedupe: we keep a per-player set of processed reward keys so a match result
--- cannot be double-granted. Keyed by user + match/session + rank.
-local _grantedKeys = {} -- userId .. "|" .. key -> true
-
-function Rewards.Grant(player: Player, amounts: { Xp?: number, Coins?: number, UnlockCosmetic?: string }, reason: string, dedupeKey: string)
+function Rewards.Grant(player: Player, amounts: { Xp: number?, Coins: number?, UnlockCosmetic: string? }, reason: string, dedupeKey: string)
 	if not player then return end
 	local key = player.UserId .. "|" .. reason .. "|" .. (dedupeKey or "none")
 	if _grantedKeys[key] then
@@ -45,10 +38,10 @@ function Rewards.Grant(player: Player, amounts: { Xp?: number, Coins?: number, U
 	end
 
 	_remotes.Events.Toast:FireClient(player, { message = ("+%s XP  +%s Coins"):format(tostring(amounts.Xp or 0), tostring(amounts.Coins or 0)) })
+	Poll.TrackToast(player, ("+%s XP  +%s Coins"):format(tostring(amounts.Xp or 0), tostring(amounts.Coins or 0)))
 	Analytics.Fire(player, "RewardGranted", { a = reason, b = tostring(amounts.Coins or 0) .. ":" .. tostring(amounts.Xp or 0) })
 end
 
--- Grant standalone completion rewards based on placement (1-based).
 function Rewards.GrantStandalone(player: Player, placement: number, totalPlayers: number, activityId: string, score: number, sessionId: string)
 	local r = GameConfig.Rewards.Standalone
 	local mult = r.EveryoneMult
@@ -58,7 +51,6 @@ function Rewards.GrantStandalone(player: Player, placement: number, totalPlayers
 	local coins = math.floor(r.BaseCoins * mult)
 	local xp = math.floor(r.BaseXp * mult)
 	Rewards.Grant(player, { Coins = coins, Xp = xp }, "standalone_" .. activityId, sessionId .. ":" .. placement)
-	-- record best score for leaderboards (best handled by LeaderboardService separately)
 	local data = PlayerData.GetForPlayer(player)
 	local entry = data.Games[activityId]
 	if not entry then
@@ -70,7 +62,6 @@ function Rewards.GrantStandalone(player: Player, placement: number, totalPlayers
 	if placement == 1 then entry.Wins += 1 end
 end
 
--- Survival round participation (guaranteed min) + placement bumps handled at win/podium.
 function Rewards.GrantSurvivalRound(player: Player, roundIndex: number, sessionId: string)
 	local r = GameConfig.Rewards.SurvivalRound
 	Rewards.Grant(player, { Coins = r.BaseCoins, Xp = r.BaseXp }, "survival_round", sessionId .. ":" .. roundIndex)
@@ -88,10 +79,6 @@ end
 function Rewards.GrantDaily(player: Player)
 	local r = GameConfig.Rewards.DailyChallenge
 	Rewards.Grant(player, { Coins = r.Coins, Xp = r.Xp }, "daily", nil)
-end
-
-function Rewards.GetGrantedKeys()
-	return _grantedKeys
 end
 
 return Rewards

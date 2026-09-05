@@ -1,79 +1,64 @@
--- SpectatorService: powers Survival round spectating.
--- After elimination (or from lobby), players enter spectate mode and preview a survivor.
+-- SpectatorService: camera cycle + emote reactions for eliminated players.
 
 local RunService = game:GetService("RunService")
-if RunService:IsClient() then
-	return {}
-end
+if RunService:IsClient() then return {} end
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RemoteBuilder = require(ReplicatedStorage.LOOPlab.Shared.RemoteBuilder)
-local Analytics = require(script.Parent.AnalyticsService)
 
 local Service = {}
 local _remotes = RemoteBuilder.GetAll()
+local _state = { active = {}, cycle = {} }
 
--- userId -> { targetUserId }
-local _targets = {}
-
--- Choose the next alive target for a spectator, cycling by id.
-local function pickTarget(spectator: Player, direction: number): Player?
-	local match = require(script.Parent.SurvivalMatchService)
-	local alive = match.GetAlivePlayers()
-	if #alive == 0 then return nil end
-
-	local current = _targets[spectator.UserId] and _targets[spectator.UserId].targetUserId or 0
-	local idx = 0
-	for i, p in alive do
-		if p.UserId == current then idx = i; break end
+function Service.BeginSpectating(player: Player, targets: { Player })
+	local t = {}
+	for _, p in targets do
+		if p ~= player then t[#t + 1] = p end
 	end
-	if idx == 0 then
-		idx = 1
-	else
-		idx = idx + direction
-		if idx > #alive then idx = 1 elseif idx < 1 then idx = #alive end
-	end
-	local target = alive[idx]
-	_targets[spectator.UserId] = { targetUserId = target.UserId }
-	return target
+	_state.active[player.UserId] = { targets = t, index = 1 }
+	_remotes.Events.SpectateUpdate:FireClient(player, { Kind = "Begin", Cycle = t })
 end
 
--- Bind remote handlers (called by SurvivalMatchService on init, or here).
+function Service.StopSpectating(player: Player)
+	_state.active[player.UserId] = nil
+	_remotes.Events.SpectateUpdate:FireClient(player, { Kind = "Stop" })
+end
+
+function Service.Cycle(player: Player, direction: string)
+	local s = _state.active[player.UserId]
+	if not s or #s.targets == 0 then return end
+	if direction == "prev" then
+		s.index = s.index - 1
+		if s.index < 1 then s.index = #s.targets end
+	else
+		s.index = s.index + 1
+		if s.index > #s.targets then s.index = 1 end
+	end
+	local target = s.targets[s.index]
+	_remotes.Events.SpectateUpdate:FireClient(player, { Kind = "Cycle", Target = target })
+end
+
+function Service.React(emote: string, fromUserId: number, toPlayer: Player)
+	_remotes.Events.Emote:FireClient(toPlayer, { From = fromUserId, Emote = emote })
+end
+
 function Service.Setup()
 	local guard = require(script.Parent.RemoteGuardService)
-	guard.BindFunction(_remotes.Functions.SpectateCycle, function(player: Player, dir: number)
-		if type(dir) ~= "number" then return nil end
-		local target = pickTarget(player, dir >= 0 and 1 or -1)
-		if not target then return nil end
-		Analytics.Fire(player, "SpectateStart", { a = "survival", b = tostring(target.UserId) })
-		return { targetName = target.DisplayName, targetUserId = target.UserId }
+	guard.BindFunction(_remotes.Functions.SpectateCycle, function(player: Player, direction: any)
+		if type(direction) ~= "string" then return nil end
+		Service.Cycle(player, direction)
+		return { ok = true }
 	end, "SpectateCycle")
 
-	guard.BindFunction(_remotes.Functions.React, function(player: Player, emote: string)
-		if type(emote) ~= "string" then return nil end
-		for _, p in Players:GetPlayers() do
-			_remotes.Events.Emote:FireClient(p, { from = player.Name, emote = emote })
+	guard.BindFunction(_remotes.Functions.React, function(player: Player, emote: any, toUserId: any)
+		if type(emote) ~= "string" or type(toUserId) ~= "number" then return nil end
+		local target = Players:GetPlayerByUserId(toUserId)
+		if target then
+			Service.React(emote, player.UserId, target)
 		end
-		return true
+		return { ok = true }
 	end, "React")
 end
-
-function Service.Reset(spectator: Player)
-	_targets[spectator.UserId] = nil
-end
-
-function Service.GetTargetUserId(userId): number?
-	local t = _targets[userId]
-	return t and t.targetUserId or nil
-end
-
-function Service.Cleanup(player: Player)
-	_targets[player.UserId] = nil
-end
-
-Players.PlayerRemoving:Connect(function(player)
-	Service.Cleanup(player)
-end)
 
 return Service

@@ -1,5 +1,4 @@
 -- PlayerDataService: authoritative player data load/save/migrate/validate.
--- Single owner of the DataStore + in-memory session cache.
 
 local RunService = game:GetService("RunService")
 if RunService:IsClient() then
@@ -11,15 +10,14 @@ local DataStoreService = game:GetService("DataStoreService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GameConfig = require(ReplicatedStorage.LOOPlab.Configuration.GameConfig)
+local RemoteBuilder = require(ReplicatedStorage.LOOPlab.Shared.RemoteBuilder)
 
 local Service = {}
+local _remotes = RemoteBuilder.GetAll()
 
--- schema: { SchemaVersion: number, Xp, Coins, OwnedCosmetics: {[string] = true}, Equipped: {[string] = string}, Games: {[id] = {Plays, BestScore, Wins}}, Survival: {Wins, Podiums, RoundsSurvived, BestPlacement, Matches}, Daily: {Date, Claimed}, Recent: { {ActivityId, Mode, Date, Score} }, Settings: {}, Unlocks: {XP level} }
-
-local DATASTORE_KEY = "LOOPLAB_PlayerData_v1"
 local _store = DataStoreService:GetDataStore("LOOPLAB_PlayerData")
-local _session = {}   -- userId -> data
-local _loading = {}   -- userId -> bool
+local _session = {}
+local _loading = {}
 
 local function defaultData()
 	return {
@@ -30,42 +28,35 @@ local function defaultData()
 		Equipped = {},
 		Games = {},
 		Survival = { Wins = 0, Podiums = 0, RoundsSurvived = 0, BestPlacement = 0, Matches = 0 },
-		Daily = { Date = "", Claimed = false },
+		Daily = { Date = "", Claimed = false, Progress = 0 },
 		Recent = {},
 		Settings = {},
 	}
 end
 
-local function clone(t)
-	if type(t) ~= "table" then return nil end
-	local out = {}
-	for k, v in pairs(t) do
-		if type(v) == "table" then out[k] = clone(v) else out[k] = v end
-	end
-	return out
-end
-
--- naive schema migration: pad missing fields, bump version.
 local function migrate(raw: table): table
 	local d = defaultData()
-	for k, v in pairs(raw) do d[k] = v end
-	-- ensure shape of nested tables if present
-	if type(raw.Daily) == "table" then
-		d.Daily = raw.Daily
-	else
-		d.Daily = defaultData().Daily
+	for k, v in pairs(raw) do
+		if type(v) == "table" then
+			d[k] = v
+		else
+			d[k] = v
+		end
 	end
-	if type(raw.Settings) ~= "table" then d.Settings = {} end
-	if type(raw.OwnedCosmetics) ~= "table" then d.OwnedCosmetics = {} end
-	if type(raw.Equipped) ~= "table" then d.Equipped = {} end
-	if type(raw.Games) ~= "table" then d.Games = {} end
-	if type(raw.Recent) ~= "table" then d.Recent = {} end
+	if type(d.Daily) ~= "table" then d.Daily = defaultData().Daily end
+	if type(d.Settings) ~= "table" then d.Settings = {} end
+	if type(d.OwnedCosmetics) ~= "table" then d.OwnedCosmetics = {} end
+	if type(d.Equipped) ~= "table" then d.Equipped = {} end
+	if type(d.Games) ~= "table" then d.Games = {} end
+	if type(d.Recent) ~= "table" then d.Recent = {} end
 	return d
 end
 
 function Service.Get(userId: number): table
 	if _session[userId] then return _session[userId] end
-	return defaultData()
+	local data = defaultData()
+	_session[userId] = data
+	return data
 end
 
 function Service.GetForPlayer(player: Player): table
@@ -74,20 +65,15 @@ end
 
 function Service.Load(player: Player)
 	local userId = player.UserId
-	if _session[userId] then
-		return true
-	end
-	if _loading[userId] then
-		return false
-	end
+	if _session[userId] then return true end
+	if _loading[userId] then return false end
 	_loading[userId] = true
 	local ok, result = pcall(function()
 		return _store:GetAsync(tostring(userId))
 	end)
 	_loading[userId] = nil
 	if ok and result then
-		local validated = migrate(result)
-		_session[userId] = validated
+		_session[userId] = migrate(result)
 	else
 		_session[userId] = defaultData()
 	end
@@ -101,7 +87,7 @@ function Service.Save(userId: number): boolean
 		_store:SetAsync(tostring(userId), data)
 	end)
 	if not ok then
-		warn("[PlayerData] save failed for " .. userId .. ": " .. tostring(err))
+		warn("[PlayerData] save failed for " .. tostring(userId) .. ": " .. tostring(err))
 		return false
 	end
 	return true
@@ -141,7 +127,6 @@ Players.PlayerRemoving:Connect(function(player)
 	task.spawn(Service.OnLeave, player)
 end)
 
--- periodic save for running sessions
 task.spawn(function()
 	while true do
 		task.wait(GameConfig.PlayerData.SaveIntervalSeconds)
@@ -151,8 +136,39 @@ task.spawn(function()
 	end
 end)
 
-function Service.GetSessionTable()
-	return _session
+-- Client-facing binds. Lazy-require dependent services to avoid load cycles.
+function Service.Setup()
+	local guard = require(script.Parent.RemoteGuardService)
+
+	guard.BindFunction(_remotes.Functions.SettingsSet, function(player: Player, settings: any)
+		if type(settings) ~= "table" then return nil end
+		local data = Service.GetForPlayer(player)
+		local writable = {}
+		if type(settings.MusicOn) == "boolean" then writable.MusicOn = settings.MusicOn end
+		if type(settings.SfxOn) == "boolean" then writable.SfxOn = settings.SfxOn end
+		if type(settings.ReducedMotion) == "boolean" then writable.ReducedMotion = settings.ReducedMotion end
+		for k, v in writable do data.Settings[k] = v end
+		return true
+	end, "SettingsSet")
+
+	guard.BindFunction(_remotes.Functions.ProfileFetch, function(player: Player)
+		local data = Service.GetForPlayer(player)
+		local economy = require(script.Parent.EconomyService)
+		local daily = require(script.Parent.DailyChallengeService)
+		local owned = {}
+		for k in data.OwnedCosmetics do table.insert(owned, k) end
+		return {
+			Level = economy.GetLevelFromXp(data.Xp),
+			Xp = data.Xp,
+			Coins = data.Coins,
+			Games = data.Games,
+			Survival = data.Survival,
+			Daily = daily.GetState(player),
+			Equipped = data.Equipped,
+			OwnedCosmetics = owned,
+			Settings = data.Settings,
+		}
+	end, "ProfileFetch")
 end
 
 return Service

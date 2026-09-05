@@ -1,43 +1,64 @@
--- MonetizationService: handles Developer Product purchases (cosmetics, private servers).
--- Real product ids come from Studio/GameConfig.Monetization. Auth is server-side.
+-- MonetizationService: dev product purchases -> cosmetics/coins (anti-dupe via receipt).
 
 local RunService = game:GetService("RunService")
-if RunService:IsClient() then
-	return {}
-end
+if RunService:IsClient() then return {} end
 
-local MarketplaceService = game:GetService("MarketplaceService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local MarketPlaceService = game:GetService("MarketplaceService")
 local GameConfig = require(ReplicatedStorage.LOOPlab.Configuration.GameConfig)
-local Cosmetic = require(script.Parent.CosmeticService)
+local Analytics = require(script.Parent.AnalyticsService)
+local PlayerData = require(script.Parent.PlayerDataService)
+local Economy = require(script.Parent.EconomyService)
 
 local Service = {}
+local _processed = {}
 
--- Maps a DeveloperProductId to a cosmetic id.
-local function productToCosmetic(productId: number): string?
-	local map = GameConfig.Monetization.CosmeticProducts
-	return map[tostring(productId)]
-end
-
-function Service.ProcessPurchase(player: Player, productId: number)
-	local cosmeticId = productToCosmetic(productId)
-	if cosmeticId then
-		-- real-time/insto grants are handled by DeveloperProductPurchasePromptFinished; here we
-		-- just record+unlock as a fallback for potential duplicated prompts.
-		local data = require(script.Parent.PlayerDataService).GetForPlayer(player)
-		data.OwnedCosmetics[cosmeticId] = true
+local function findProduct(productId: number)
+	for _, p in GameConfig.Monetization.CosmeticProducts do
+		if p.ProductId == productId then return p end
 	end
+	return nil
 end
 
-function Service.Setup()
-	if GameConfig.Monetization.PrivateServerProductId > 0 then
-		MarketplaceService.ProcessReceipt = function(receiptInfo)
-			-- Cloud-time purchase handled via DataStore keyed by receipt; MVP: grant cosmetic.
-			local who = game:GetService("Players"):GetPlayerByUserId(receiptInfo.PlayerId)
-			if who then Service.ProcessPurchase(who, receiptInfo.ProductId) end
-			return Enum.PurchaseGranted? and Enum.PurchaseGranted or Enum.ProductPurchaseDecision.PurchaseGranted
+MarketPlaceService.ProcessReceipt = function(receipt: any)
+	if _processed[receipt.PurchaseId] then return Enum.ProductPurchaseDecision.PurchaseGranted end
+	local product = findProduct(receipt.ProductId)
+	if not product then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+	local player = Players:GetPlayerByUserId(receipt.PlayerId)
+	if not player then return Enum.ProductPurchaseDecision.NotProcessedYet end
+	PlayerData.Load(player)
+	local data = PlayerData.GetForPlayer(player)
+	local ok = false
+	if product.Kind == "Cosmetic" then
+		if not data.OwnedCosmetics[product.ItemId] then
+			data.OwnedCosmetics[product.ItemId] = true
+			ok = true
 		end
+	elseif product.Kind == "Coins" then
+		Economy.AddCoins(player, product.Amount)
+		ok = true
+	elseif product.Kind == "Xp" then
+		Economy.AddXp(player, product.Amount)
+		ok = true
 	end
+	if ok then
+		_processed[receipt.PurchaseId] = true
+		PlayerData.SavePlayer(player)
+		Analytics.Fire(player, "Purchase", { a = tostring(product.ProductId), b = product.ItemId or tostring(product.Amount) })
+		return Enum.ProductPurchaseDecision.PurchaseGranted
+	end
+	return Enum.ProductPurchaseDecision.NotProcessedYet
+end
+
+local function createPrivateServer()
+	if GameConfig.Monetization.PrivateServerProductId == 0 then return end
+	local ok, err = pcall(function()
+		-- placeholder for private server flow
+	end)
+	if not ok then warn("[Monetization] private server flow failed: " .. tostring(err)) end
 end
 
 return Service
