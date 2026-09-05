@@ -45,9 +45,17 @@ Created scaffolding only — no gameplay code:
 - No services, economy, recommendation engine, monetization, mini-games, or UI
   built in this milestone.
 
-### Known issues / risks
-- None. Greenfield foundation.
+---
 
-### Next
-- Milestone 1: (to be defined) — e.g. PlayerDataService + server-authoritative
-  player data foundation.
+## [PRD v2.0 Adoption] — 2026-09-05
+
+### Product direction change
+- Old concept (open "playground" of many mini-games) replaced by **v2.0**:
+  exactly **4 standalone mini-games + 1 flagship LOOPLAB Survival mode**.
+- Survival = 10-player lobby, 4 rounds (one per game), escalating difficulty,
+  elimination (default 10→8→5→3→1, configurable), spectator mode, last-one-standing.
+- Added: per-game leaderboards + prestigious Survival leaderboard.
+- `docs/PRD.md` synced to v2.0 (26 sections) — new authoritative source of truth.
+- `docs/ARCHITECTURE.md` updated to reflect Survival orchestration, ActivityRegistry
+  contract, spectator, queue/lobby, leaderboard, and updated milestone roadmap.
+- Gave a full planning blueprint (24 sections) covering all systems; approved.
