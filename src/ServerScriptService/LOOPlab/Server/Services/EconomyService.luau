@@ -39,7 +39,17 @@ end
 
 function Economy.AddXp(player: Player, amount: number): number
 	local data = PlayerData.GetForPlayer(player)
+	local oldLevel = Economy.GetLevelFromXp(data.Xp)
 	data.Xp = math.max(0, data.Xp + amount)
+	local newLevel = Economy.GetLevelFromXp(data.Xp)
+	if newLevel > oldLevel then
+		local levelsGained = newLevel - oldLevel
+		local data2 = PlayerData.GetForPlayer(player)
+		local coins = GameConfig.Progression.LevelUpCoins * levelsGained
+		data2.Coins = math.max(0, data2.Coins + coins)
+		local Poll = require(script.Parent.PollService)
+		Poll.TrackFx(player, "LevelUp", { Level = newLevel, Coins = coins })
+	end
 	pushUpdate(player.UserId)
 	return data.Xp
 end

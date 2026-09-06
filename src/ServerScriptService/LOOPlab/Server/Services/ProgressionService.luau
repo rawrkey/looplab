@@ -49,7 +49,6 @@ function Service.ProcessStandalone(player: Player, placement: number, score: num
 	else
 		mxp = cfg.Xp.Play
 	end
-	mxp = math.min(mxp, cfg.Xp.ScoreCap)
 	data.MasteryXp = prevMxp + mxp
 
 	local oldRank = Service.GetMasteryRank(prevMxp)
@@ -94,7 +93,6 @@ function Service.ProcessSurvival(player: Player, rank: number, survivedRounds: n
 	else
 		mxp = cfg.Xp.SurvivalPlay
 	end
-	mxp = math.min(mxp, cfg.Xp.ScoreCap)
 	data.MasteryXp = prevMxp + mxp
 
 	if not data.Survival.WinStreak then data.Survival.WinStreak = 0 end
@@ -109,7 +107,12 @@ function Service.ProcessSurvival(player: Player, rank: number, survivedRounds: n
 		data.Survival.WinStreak = 0
 	end
 
-	if survivedRounds >= totalRounds and totalRounds > 0 then
+	-- "Final round" = round totalRounds. A player REACHES it by surviving
+	-- rounds 1..(totalRounds-1), so survivedRounds >= totalRounds - 1. This
+	-- counts both the winner (survivedRounds == totalRounds) and the other
+	-- finalists. Matches the field name, the `final_round` badge desc ("Reach
+	-- the final round") and the `final_regular` title.
+	if totalRounds > 1 and survivedRounds >= totalRounds - 1 then
 		if not data.Survival.FinalRoundAppearances then data.Survival.FinalRoundAppearances = 0 end
 		data.Survival.FinalRoundAppearances += 1
 	end
@@ -151,7 +154,7 @@ local _badgeChecks = {
 		return (data.Survival and data.Survival.Wins or 0) >= 10
 	end,
 	survive_all = function(data)
-		return false
+		return (data.Survival and data.Survival.Wins or 0) >= 1
 	end,
 	final_round = function(data)
 		return (data.Survival and data.Survival.FinalRoundAppearances or 0) >= GameConfig.Progression.Survival.FinalRoundBadgeThreshold

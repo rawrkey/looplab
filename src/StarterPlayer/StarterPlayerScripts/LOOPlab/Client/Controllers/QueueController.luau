@@ -34,10 +34,12 @@ function QueueController.LobbyUpdate(payload)
 			Title = "SURVIVAL",
 			Target = payload.LobbySize or 10,
 			Message = payload.Message or "Survival lobby is filling...",
+			RoundOrder = payload.RoundOrder,
 		})
 		QueueScreen:Set({
 			Queued = payload.PlayerCount or 0,
 			Target = payload.LobbySize or 10,
+			RoundOrder = payload.RoundOrder,
 		})
 		AudioService.PlayLobby()
 	elseif phase == "Countdown" then
@@ -66,6 +68,8 @@ function QueueController.Results(payload)
 	if not payload or QueueController.ResultsDismissed then return end
 	if ViewController.GetCurrentName() ~= "Results" then
 		ViewController.Show("Results", {
+			Mode = payload.Mode,
+			ActivityId = payload.ActivityId,
 			Rows = payload.Rows,
 			Rewards = payload.Rewards,
 		})
@@ -75,6 +79,8 @@ function QueueController.Results(payload)
 	pcall(function()
 		local Results = require(script.Parent.Parent.Components.Screens.Results)
 		Results:SetResults({
+			Mode = payload.Mode,
+			ActivityId = payload.ActivityId,
 			Rows = payload.Rows,
 			Rewards = payload.Rewards,
 		})

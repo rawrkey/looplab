@@ -51,6 +51,26 @@ function ActivityService.CreateSession(activityId: string, mode: string, difficu
 		for _, p in players do
 			_remotes.Events.ActivityUpdate:FireClient(p, payload)
 		end
+		-- Route lightweight gameplay feedback through the established poll Fx
+		-- queue (server-authoritative, coalesced per poll). Optional per-player
+		-- targeting via Fx.TargetUserId.
+		if payload and type(payload.Fx) == "table" then
+			local Poll = require(script.Parent.PollService)
+			local fx = payload.Fx
+			local target = fx.TargetUserId
+			if target then
+				for _, p in players do
+					if p.UserId == target then
+						Poll.TrackFx(p, { Kind = fx.Kind, Data = fx.Data })
+						break
+					end
+				end
+			else
+				for _, p in players do
+					Poll.TrackFx(p, { Kind = fx.Kind, Data = fx.Data })
+				end
+			end
+		end
 	end
 	gameSession.OnResult = function(scoresheet)
 		session.Result = scoresheet

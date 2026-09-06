@@ -61,7 +61,7 @@ function MatchController.RoundBegin(payload)
 	_finalShown = {}
 
 	Hud:SetActivity(ActivityName, Accent, Mode)
-	Hud:SetState({ Round = Round, TotalRounds = TotalRounds, Phase = "Running", Message = payload.Message or "" })
+	Hud:SetState({ Round = Round, TotalRounds = TotalRounds, Phase = "Running", Message = payload.Message or "", SubLabel = (Mode == "Survival" and payload.Difficulty) and (payload.Difficulty:upper()) or payload.SubLabel })
 
 	ViewController.Show("MatchHud")
 

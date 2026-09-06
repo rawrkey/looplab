@@ -109,6 +109,8 @@ function Settings:Build(parent)
 	end)
 	local motionVal = toggleRow(0.66, "Reduced Motion", "Disable non-essential animations", function() return Settings.ReducedMotion end, function()
 		Settings.ReducedMotion = not Settings.ReducedMotion
+		-- Apply immediately so the runtime honors the preference now, not only after save.
+		UIKit.ReducedMotion = Settings.ReducedMotion
 	end)
 
 	self.Store.MusicVal = musicVal
@@ -138,6 +140,7 @@ function Settings:Apply(saved)
 	if saved.MusicOn == false then AudioService.SetMusicVolume(0) end
 	if saved.SfxOn == false then AudioService.SetSfxVolume(0) end
 	self.ReducedMotion = saved.ReducedMotion == true
+	UIKit.ReducedMotion = self.ReducedMotion
 end
 
 function Settings:Refresh()

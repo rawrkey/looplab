@@ -169,7 +169,12 @@ function EffectsService.EliminateFlash(accent: Color3?)
 end
 
 function EffectsService.RoundBanner(round: number, total: number, activityName: string, accent: Color3?)
-	EffectsService.Banner(("ROUND %d"):format(round), activityName, accent or Theme.Brand.Primary)
+	-- Render round progress (e.g. "ROUND 2 / 4") so Survival escalation is readable.
+	if total and total > 1 then
+		EffectsService.Banner(("ROUND %d / %d"):format(round, total), activityName, accent or Theme.Brand.Primary)
+	else
+		EffectsService.Banner(("ROUND %d"):format(round), activityName, accent or Theme.Brand.Primary)
+	end
 end
 
 function EffectsService.Victory(winnerName: string, accent: Color3?)

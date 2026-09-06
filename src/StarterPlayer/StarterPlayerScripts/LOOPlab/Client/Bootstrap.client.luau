@@ -136,6 +136,7 @@ local function sync()
 					LobbySize = a.LobbySize,
 					Countdown = a.Countdown,
 					Message = a.Message,
+					RoundOrder = a.RoundOrder,
 				})
 			end
 		elseif a.Phase == "Aborted" then

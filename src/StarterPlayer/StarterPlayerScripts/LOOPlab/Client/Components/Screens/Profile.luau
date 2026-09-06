@@ -79,10 +79,12 @@ function Profile:Build(parent)
 	identity.BackgroundTransparency = Theme.Opacity.Card
 	local edge2 = UIKit.Frame({ Parent = identity, Size = UDim2.new(1, 0, 0, 3), AnchorPoint = Vector2.new(0, 0), BackgroundColor3 = Theme.MasteryColor("gold") })
 	UIKit.Corner(Theme.Radius.Small).Parent = edge2
+	self.Store.IdentityEdge = edge2
 
 	local avatarRing = UIKit.Frame({ Parent = identity, Size = UDim2.fromOffset(72, 72), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0.02, 0, 0.5, 0), BackgroundColor3 = Theme.Palette.PanelAlt })
 	UIKit.Corner(Theme.Radius.Pill).Parent = avatarRing
 	UIKit.Stroke(Theme.MasteryColor("gold"), 1, Theme.Opacity.Subtle).Parent = avatarRing
+	self.Store.AvatarRingCross = avatarRing:FindFirstChildOfClass("UIStroke")
 	local avatar = Instance.new("ImageLabel")
 	avatar.Size = UDim2.fromScale(1, 1)
 	avatar.BackgroundTransparency = 1
@@ -202,7 +204,7 @@ function Profile:Build(parent)
 	dailyBar.AnchorPoint = Vector2.new(0.5, 0)
 	dailyBar.Position = UDim2.new(0.5, 0, 0.92, 0)
 	dailyBar.BackgroundTransparency = Theme.Opacity.Card
-	local dailyText = UIKit.Muted(dailyBar, "Daily Challenge", UDim2.new(0.5, 0, 1, 0), Theme.Brand.Gold)
+	local dailyText = UIKit.Muted(dailyBar, "Daily Challenge", UDim2.new(0.66, 0, 1, 0), Theme.Brand.Gold)
 	dailyText.AnchorPoint = Vector2.new(0, 0.5)
 	dailyText.Position = UDim2.new(0.04, 0, 0.5, 0)
 	dailyText.TextScaled = false
@@ -300,8 +302,12 @@ function Profile:SetProfile(data)
 	end
 	if data.MasteryRank and self.Store.Mastery then
 		local rank = data.MasteryRank
+		local rankColor = Theme.MasteryColor(rank.Id or "gold")
 		self.Store.Mastery.Text = (rank.Display or rank.Name or "BRONZE"):gsub("\n", "")
-		self.Store.Mastery.TextColor3 = Theme.MasteryColor(rank.Id)
+		self.Store.Mastery.TextColor3 = rankColor
+		-- Signature identity accents follow the player's actual mastery color.
+		if self.Store.IdentityEdge then self.Store.IdentityEdge.BackgroundColor3 = rankColor end
+		if self.Store.AvatarRingCross then self.Store.AvatarRingCross.Color = rankColor end
 	end
 	if data.MasteryXp ~= nil and self.Store.MasteryXp then
 		self.Store.MasteryXp.Text = ("%d MXP"):format(data.MasteryXp)
@@ -332,12 +338,33 @@ function Profile:SetProfile(data)
 	end
 end
 
-function Profile:SetDailyClaim(claimed: boolean)
+local function describeObjective(objective)
+	if not objective then return "Complete an activity" end
+	local kind = objective.Kind
+	local min = objective.Min or 1
+	if kind == "win" then
+		return ("Win %s match%s"):format(min == 1 and "a" or tostring(min), min == 1 and "" or "es")
+	elseif kind == "best_score" then
+		return ("Score %s points"):format(tostring(min))
+	end
+	return ("Complete %s activit%s"):format(tostring(min), min == 1 and "y" or "ies")
+end
+
+function Profile:SetDaily(daily)
+	local claimed = daily and daily.Claimed == true
 	if self.Store and self.Store.DailyClaim then
 		self.Store.DailyClaim.Text = claimed and "CLAIMED" or "CLAIM"
 	end
 	if self.Store and self.Store.DailyText then
-		self.Store.DailyText.Text = claimed and "Daily claimed ✓" or "Daily Challenge"
+		if claimed then
+			self.Store.DailyText.Text = "Daily claimed ✓"
+		else
+			local reward = GameConfig.Rewards.DailyChallenge
+			local desc = describeObjective(daily and daily.Objective)
+			local progress = daily and daily.Progress or 0
+			local min = (daily and daily.Objective and daily.Objective.Min) or 1
+			self.Store.DailyText.Text = ("%s (%d/%d) · +%d XP"):format(desc, progress, min, reward and reward.Xp or 0)
+		end
 	end
 end
 

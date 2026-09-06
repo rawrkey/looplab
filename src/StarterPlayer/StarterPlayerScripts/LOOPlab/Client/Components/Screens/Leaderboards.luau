@@ -2,6 +2,7 @@
 
 local UIKit = require(script.Parent.Parent.UIKit)
 local Theme = require(script.Parent.Parent.Theme)
+local Players = game:GetService("Players")
 
 local Leaderboards = {
 	Name = "Leaderboards",
@@ -135,6 +136,22 @@ function Leaderboards:SetEntries(entries)
 	for _, b in BOARDS do
 		if b.id == self.selected then accent = b.accent end
 	end
+	-- Research a display name for an entry. Only connected players can be
+	-- named on the client (the leaderboard store returns userId only); everyone
+	-- else gets the honest "Player #id" fallback rather than a fabricated name.
+	local function displayName(entry)
+		if entry.Name and entry.Name ~= "" then return tostring(entry.Name) end
+		if entry.DisplayName and entry.DisplayName ~= "" then return tostring(entry.DisplayName) end
+		local uid = entry.UserId
+		if type(uid) == "number" then
+			for _, p in Players:GetPlayers() do
+				if p.UserId == uid then return p.DisplayName or p.Name end
+			end
+			return ("Player %d"):format(uid)
+		end
+		return "Player"
+	end
+
 	for i, e in entries do
 		local isPodium = i <= 3
 		local podiumColor = isPodium and PODIUM_COLORS[i] or Theme.Palette.PanelAlt
@@ -153,7 +170,7 @@ function Leaderboards:SetEntries(entries)
 		place.TextSize = isPodium and Theme.TypeSize.Small or Theme.TypeSize.Tiny
 		if not isPodium then place.TextColor3 = Theme.Palette.TextDim end
 
-		local name = UIKit.Text(row, ("Player %d"):format(e.UserId), UDim2.new(0.62, 0, 1, 0), Theme.Palette.Text)
+		local name = UIKit.Text(row, displayName(e), UDim2.new(0.62, 0, 1, 0), Theme.Palette.Text)
 		name.AnchorPoint = Vector2.new(0, 0.5)
 		name.Position = UDim2.new(0, 52, 0.5, 0)
 		name.TextScaled = false

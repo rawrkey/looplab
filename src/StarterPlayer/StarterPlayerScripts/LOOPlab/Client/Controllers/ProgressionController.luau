@@ -62,10 +62,17 @@ end
 -- Serialized handling of the server-side Fx queue (drained on each poll).
 function ProgressionController.HandleFxQueue(fxList)
 	if not type(fxList) == "table" then return end
+	local Feedback = require(script.Parent.FeedbackController)
 	for _, entry in fxList do
 		local kind = entry.Kind
 		local data = entry.Data or {}
-		if kind == "MasteryUp" then
+		if kind == "checkpoint" or kind == "finish" or kind == "hit"
+			or kind == "place" or kind == "correct" or kind == "wrong"
+			or kind == "roundclear" then
+			Feedback.Handle(kind, data)
+		elseif kind == "LevelUp" then
+			EffectsService.LevelUp(data)
+		elseif kind == "MasteryUp" then
 			EffectsService.MasteryUp(data.Rank)
 		elseif kind == "PersonalBest" then
 			EffectsService.PersonalBest(data.Score or 0)
@@ -84,7 +91,7 @@ function ProgressionController.ShowProfile()
 		pcall(function()
 			local daily = remotes.Functions.DailyState:InvokeServer()
 			if daily and ProfileScreen then
-				ProfileScreen:SetDailyClaim(daily.Claimed == true)
+				ProfileScreen:SetDaily(daily)
 			end
 		end)
 	end)
@@ -136,6 +143,12 @@ end
 function ProgressionController.ApplyProfile(profile)
 	if not profile then return end
 	LastProfile = profile
+	-- Apply persisted audio/accessibility prefs (incl. Reduced Motion) at boot.
+	if SettingsScreen and profile.Settings then
+		pcall(function()
+			SettingsScreen:Apply(profile.Settings)
+		end)
+	end
 	if Hub then
 		Hub:SetProgression(profile.Level, profile.Xp, xpNextFor(profile.Level), profile.Coins)
 		Hub:SetMastery(profile.MasteryRank)
@@ -183,8 +196,14 @@ function ProgressionController.ClaimDaily()
 	pcall(function()
 		local ok = remotes.Functions.DailyClaim:InvokeServer()
 		if ok then
-			EffectsService.Toast("Daily claimed! +60 Coins +100 XP")
-			ProfileScreen:SetDailyClaim(true)
+			local rw = GameConfig.Rewards.DailyChallenge
+			EffectsService.Toast(("Daily claimed! +%d Coins +%d XP"):format(rw.Coins, rw.Xp))
+			if ProfileScreen then
+				pcall(function()
+					local st = remotes.Functions.DailyState:InvokeServer()
+					if st then ProfileScreen:SetDaily(st) end
+				end)
+			end
 			AudioService.PlayVictory()
 			ProgressionController.FetchProfile()
 		else

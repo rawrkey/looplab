@@ -4,6 +4,7 @@
 
 local UIKit = require(script.Parent.Parent.UIKit)
 local Theme = require(script.Parent.Parent.Theme)
+local GameConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("LOOPlab").Configuration.GameConfig)
 local AudioService = require(script.Parent.Parent.AudioService)
 
 local Hub = {
@@ -71,30 +72,57 @@ function Hub:Build(parent)
 	brandSub.TextSize = Theme.TypeSize.Tiny
 
 	-- TOP RIGHT — Compact Player Status (small floating pill)
-	local pStatus = UIKit.Frame({ Parent = root, Size = UDim2.new(0.4, 0, 0, 44), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(0.97, 0, 0.04, 0), BackgroundColor3 = Theme.WithAlpha(Theme.Palette.PanelAlt, 0.7) })
+	local pStatus = UIKit.Frame({ Parent = root, Size = UDim2.new(0.4, 0, 0, 56), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(0.97, 0, 0.04, 0), BackgroundColor3 = Theme.WithAlpha(Theme.Palette.PanelAlt, 0.7) })
 	pStatus.BackgroundTransparency = Theme.Opacity.Soft
 	UIKit.Corner(Theme.Radius.Medium).Parent = pStatus
 	UIKit.Stroke(Theme.Brand.Gold, 0.5, Theme.Opacity.Subtle).Parent = pStatus
 
 	local avatar = UIKit.Frame({ Parent = pStatus, Size = UDim2.fromOffset(32, 32), BackgroundColor3 = Theme.Palette.Panel })
-	avatar.Position = UDim2.new(0.06, 0, 0.5, 0)
+	avatar.Position = UDim2.new(0.06, 0, 0.38, 0)
 	avatar.AnchorPoint = Vector2.new(0, 0.5)
 	UIKit.Corner(Theme.Radius.Pill).Parent = avatar
 
 	local pName = UIKit.Muted(pStatus, "Player", UDim2.new(0.35, 0, 0, 14), Theme.Palette.Text)
-	pName.Position = UDim2.new(0.16, 0, 0.22, 0)
+	pName.Position = UDim2.new(0.16, 0, 0.14, 0)
 	pName.TextScaled = false
 	pName.TextSize = Theme.TypeSize.Tiny
 
-	local pLv = UIKit.Title(pStatus, "L1", UDim2.new(0.2, 0, 0, 14), Theme.Brand.Gold)
-	pLv.Position = UDim2.new(0.16, 0, 0.55, 0)
+	local pLv = UIKit.Title(pStatus, "Lv 1", UDim2.new(0.22, 0, 0, 14), Theme.Brand.Gold)
+	pLv.Position = UDim2.new(0.16, 0, 0.45, 0)
 	pLv.TextScaled = false
 	pLv.TextSize = Theme.TypeSize.Small
 
-	local pCoins = UIKit.Muted(pStatus, "◉ 0", UDim2.new(0.25, 0, 0, 12), Theme.Brand.Gold)
-	pCoins.Position = UDim2.new(0.72, 0, 0.55, 0)
+	local pCoins = UIKit.Muted(pStatus, "◉ 0", UDim2.new(0.22, 0, 0, 12), Theme.Brand.Gold)
+	pCoins.Position = UDim2.new(0.38, 0, 0.45, 0)
 	pCoins.TextScaled = false
 	pCoins.TextSize = Theme.TypeSize.Tiny
+
+	local pNext = UIKit.Muted(pStatus, "next: Lv 2", UDim2.new(0.5, 0, 0, 12), Theme.Palette.TextDim)
+	pNext.Position = UDim2.new(0.06, 0, 0.8, 0)
+	pNext.TextScaled = false
+	pNext.TextSize = Theme.TypeSize.Tiny
+	self.Store.NextLv = pNext
+
+	local masteryChip = UIKit.Frame({ Parent = pStatus, Size = UDim2.new(0, 48, 0, 18), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(0.94, 0, 0.28, 0), BackgroundColor3 = Theme.MasteryColor("bronze") })
+	UIKit.Corner(Theme.Radius.Pill).Parent = masteryChip
+	UIKit.Stroke(Theme.MasteryColor("bronze"), 0.5, Theme.Opacity.Subtle).Parent = masteryChip
+	masteryChip.BackgroundTransparency = 0.75
+	local masteryLbl = UIKit.Text(masteryChip, "BRONZE", UDim2.fromScale(1, 1), Theme.MasteryColor("bronze"))
+	masteryLbl.TextScaled = true
+	masteryLbl.Font = Theme.Type.Body
+	self.Store.Mastery = masteryLbl
+	self.Store.MasteryChip = masteryChip
+
+	local xpBar, xpFill = UIKit.ProgressBar(pStatus, UDim2.new(0.88, 0, 0, 4), Theme.Brand.Primary, 0)
+	xpBar.AnchorPoint = Vector2.new(0.5, 1)
+	xpBar.Position = UDim2.new(0.5, 0, 0.94, 0)
+	xpBar.BackgroundTransparency = 0.5
+	xpFill.BackgroundTransparency = 0
+	self.Store.XpBarWrap = xpBar
+	self.Store.XpBarFill = xpFill
+
+	self.Store.Level = pLv
+	self.Store.Coins = pCoins
 
 	-- CENTER TOP — SURVIVAL HERO (dominant, fully visible, large)
 	local survZone = UIKit.Frame({ Parent = root, Size = UDim2.new(0.9, 0, 0, 220), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.16, 0) })
@@ -250,17 +278,58 @@ end
 
 function Hub:SetProgression(level, xp, xpNext, coins)
 	if not self.Store then return end
+	level = level or 1
+	xp = xp or 0
+	xpNext = xpNext or 100
+	coins = coins or 0
+	if self.Store.Level then
+		self.Store.Level.Text = ("Lv %d"):format(level)
+	end
+	if self.Store.Coins then
+		self.Store.Coins.Text = ("◉ %d"):format(coins)
+	end
+	if self.Store.XpBarFill then
+		local fraction = math.clamp(xp / math.max(xpNext, 1), 0, 1)
+		UIKit.Tween(self.Store.XpBarFill, { Size = UDim2.new(fraction, 0, 1, 0) }, Theme.Motion.Fast, Enum.EasingStyle.Quad)
+	end
+	if self.Store.NextLv then
+		if level >= (GameConfig.Xp.MaxLevel or 1) then
+			self.Store.NextLv.Text = "max level reached"
+		else
+			local remaining = math.max((xpNext or 0) - xp, 0)
+			self.Store.NextLv.Text = ("next: Lv %d · %d XP"):format(level + 1, remaining)
+		end
+	end
 end
 
 function Hub:SetMastery(rank)
+	if not self.Store then return end
+	rank = rank or {}
+	local id = rank.Id or "bronze"
+	local display = (rank.Display or rank.Name or "BRONZE"):gsub("\n", "")
+	local color = Theme.MasteryColor(id)
+	if self.Store.Mastery then
+		self.Store.Mastery.Text = display:upper()
+		self.Store.Mastery.TextColor3 = color
+	end
+	if self.Store.MasteryChip then
+		UIKit.Tween(self.Store.MasteryChip, { BackgroundColor3 = color }, Theme.Motion.Fast)
+		local stroke = self.Store.MasteryChip:FindFirstChildOfClass("UIStroke")
+		if stroke then stroke.Color = color end
+	end
 end
 
 function Hub:SetRecords(records)
 	if not self.Store then return end
 	records = records or {}
-	for _, g in ({id="chaos_run"},{id="dodge_lab"},{id="build_blitz"},{id="sequence_sprint"}) do
-		local lbl = self.Store.Cards and self.Store.Cards[g.id]
-		if lbl and records[g.id] then lbl.Text = ("BEST %d"):format(records[g.id]) end
+	for _, id in ipairs({ "chaos_run", "dodge_lab", "build_blitz", "sequence_sprint" }) do
+		local lbl = self.Store.Cards and self.Store.Cards[id]
+		if lbl and records[id] then lbl.Text = ("BEST %d"):format(records[id]) end
+	end
+	if self.Store.SurvBest then
+		self.Store.SurvBest.Text = records["survival"]
+			and ("BEST WINS — %d"):format(records["survival"])
+			or "BEST WINS —"
 	end
 end
 

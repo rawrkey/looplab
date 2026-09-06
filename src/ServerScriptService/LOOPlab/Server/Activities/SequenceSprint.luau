@@ -2,6 +2,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Contract = require(ReplicatedStorage.LOOPlab.Shared.ActivityContract)
+local GameConfig = require(ReplicatedStorage.LOOPlab.Configuration.GameConfig)
 
 local Activity = {
 	Id = "sequence_sprint",
@@ -30,6 +31,7 @@ local function newSession(deps)
 	local self = setmetatable({}, Session)
 	self.ActivityId = deps.ActivityId
 	self.Mode = deps.Mode
+	self.Difficulty = deps.Difficulty
 	self.Players = deps.Players
 	self.Duration = deps.Duration
 	self.States = {}
@@ -53,7 +55,7 @@ end
 
 local function showSequence(self, player, seq)
 	self.OnUpdate({ Kind = "Activity", ActivityId = self.ActivityId, Data = { Phase = "show", Sequence = seq, PadCount = #self.Pads } })
-	task.wait(SHOW_TIME * #seq)
+	task.wait(SHOW_TIME * self.ShowMult * #seq)
 end
 
 local function nextRound(self, player)
@@ -66,7 +68,7 @@ local function nextRound(self, player)
 	state.Sequence = seq
 	state.Index = 1
 	state.Waiting = true
-	state.RoundTimeout = os.clock() + INPUT_WINDOW
+	state.RoundTimeout = os.clock() + INPUT_WINDOW * self.InputMult
 	showSequence(self, player, seq)
 	self.OnUpdate({ Kind = "Activity", ActivityId = self.ActivityId, Data = { Phase = "input", Length = len, PadCount = #self.Pads } })
 end
@@ -87,6 +89,9 @@ function Session:Start()
 		end
 	end
 	self.StartedAt = os.clock()
+	local diff = GameConfig.Survival.DifficultyMultipliers[self.Difficulty or "Normal"] or GameConfig.Survival.DifficultyMultipliers.Normal
+	self.ShowMult = diff.ShowMult or 1
+	self.InputMult = diff.InputMult or 1
 	for _, p in self.Players do
 		self.OnUpdate({ Kind = "MatchState", Mode = self.Mode, ActivityId = self.ActivityId, Phase = "running", TimeLeft = self.Duration, Message = "Watch and repeat!" })
 		nextRound(self, p)
@@ -103,7 +108,7 @@ function Session:HandleInput(player, action, data)
 		state.Waiting = false
 		state.Score = math.max(0, state.Score - 1)
 		self.OnUpdate({ Kind = "Activity", ActivityId = self.ActivityId, Data = { Phase = "wrong", Score = state.Score } })
-		self.OnUpdate({ Kind = "MatchState", Mode = self.Mode, ActivityId = self.ActivityId, Phase = "running", TimeLeft = math.max(0, self.Duration - (os.clock() - self.StartedAt)), Message = "Wrong!" })
+		self.OnUpdate({ Kind = "MatchState", Mode = self.Mode, ActivityId = self.ActivityId, Phase = "running", TimeLeft = math.max(0, self.Duration - (os.clock() - self.StartedAt)), Message = "Wrong!", Fx = { Kind = "wrong", TargetUserId = player.UserId } })
 		state.Index = 1
 		nextRound(self, player)
 		return
@@ -115,6 +120,7 @@ function Session:HandleInput(player, action, data)
 		state.Score += add * 10
 		state.Round += 1
 		self.OnUpdate({ Kind = "Activity", ActivityId = self.ActivityId, Data = { Phase = "correct", Score = state.Score } })
+		self.OnUpdate({ Kind = "MatchState", Mode = self.Mode, ActivityId = self.ActivityId, Phase = "running", TimeLeft = math.max(0, self.Duration - (os.clock() - self.StartedAt)), Message = "Round clear!", Fx = { Kind = "roundclear", TargetUserId = player.UserId } })
 		nextRound(self, player)
 	end
 end

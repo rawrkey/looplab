@@ -43,7 +43,7 @@ function Service.GetState(player: Player): table
 	}
 end
 
-function Service.RecordProgress(player: Player, activityId: string, score: number)
+function Service.RecordProgress(player: Player, activityId: string, score: number, isWin: boolean)
 	local data = PlayerData.GetForPlayer(player)
 	local t = todayKey()
 	if data.Daily.Date ~= t then
@@ -56,14 +56,16 @@ function Service.RecordProgress(player: Player, activityId: string, score: numbe
 	local added = 0
 	if objective.Kind == "complete" then
 		added = 1
-	elseif objective.Kind == "win" and score >= 1 then
-		added = 1
+	elseif objective.Kind == "win" then
+		added = (isWin and 1) or 0
 	elseif objective.Kind == "best_score" then
 		added = score or 0
 	end
 	data.Daily.Progress += added
-	_remotes.Events.Toast:FireClient(player, { message = "Daily progress updated!" })
-	Poll.TrackToast(player, "Daily progress updated!")
+	if added > 0 then
+		_remotes.Events.Toast:FireClient(player, { message = "Daily progress updated!" })
+		Poll.TrackToast(player, "Daily progress updated!")
+	end
 end
 
 function Service.Claim(player: Player): (boolean, string?)

@@ -32,6 +32,7 @@
         "Server": {
           "$className": "Folder",
           "Bootstrap": { "$path": "src/ServerScriptService/LOOPlab/Server/Bootstrap.server.luau" },
+          "LabEnvironment": { "$path": "src/ServerScriptService/LOOPlab/Server/LabEnvironment.server.luau" },
           "Services": {
             "$className": "Folder",
             "AnalyticsService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/AnalyticsService.luau" },
@@ -46,7 +47,9 @@
             "LeaderboardService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/LeaderboardService.luau" },
             "DailyChallengeService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/DailyChallengeService.luau" },
             "CosmeticService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/CosmeticService.luau" },
-            "MonetizationService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/MonetizationService.luau" }
+            "MonetizationService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/MonetizationService.luau" },
+            "ProgressionService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/ProgressionService.luau" },
+            "PollService": { "$path": "src/ServerScriptService/LOOPlab/Server/Services/PollService.luau" }
           },
           "Activities": {
             "$className": "Folder",
@@ -69,6 +72,9 @@
             "Bootstrap": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Bootstrap.client.luau" },
             "Components": {
               "$className": "Folder",
+              "Theme": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/Theme.luau" },
+              "AudioService": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/AudioService.luau" },
+              "EffectsService": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/EffectsService.luau" },
               "ViewController": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/ViewController.luau" },
               "UIKit": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/UIKit.luau" },
               "Screens": {
@@ -80,7 +86,8 @@
                 "Results": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/Screens/Results.luau" },
                 "Leaderboards": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/Screens/Leaderboards.luau" },
                 "Profile": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/Screens/Profile.luau" },
-                "Settings": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/Screens/Settings.luau" }
+                "Settings": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/Screens/Settings.luau" },
+                "Cosmetics": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Components/Screens/Cosmetics.luau" }
               }
             },
             "Controllers": {
@@ -90,7 +97,8 @@
               "MatchController": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Controllers/MatchController.luau" },
               "SpectatorController": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Controllers/SpectatorController.luau" },
               "ProgressionController": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Controllers/ProgressionController.luau" },
-              "LeaderboardController": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Controllers/LeaderboardController.luau" }
+              "LeaderboardController": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Controllers/LeaderboardController.luau" },
+              "FeedbackController": { "$path": "src/StarterPlayer/StarterPlayerScripts/LOOPlab/Client/Controllers/FeedbackController.luau" }
             }
           }
         }

@@ -2,6 +2,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Contract = require(ReplicatedStorage.LOOPlab.Shared.ActivityContract)
+local GameConfig = require(ReplicatedStorage.LOOPlab.Configuration.GameConfig)
 
 local Activity = {
 	Id = "build_blitz",
@@ -28,6 +29,7 @@ local function newSession(deps)
 	local self = setmetatable({}, Session)
 	self.ActivityId = deps.ActivityId
 	self.Mode = deps.Mode
+	self.Difficulty = deps.Difficulty
 	self.Players = deps.Players
 	self.Duration = deps.Duration
 	self.States = {}
@@ -54,6 +56,7 @@ local function placeBlock(self, player)
 	local state = self.States[player.UserId]
 	if not state then return end
 	if state.BlockedCount >= MAX_BLOCKS then return false end
+	if self.BlockMult and state.BlockedCount >= math.floor(MAX_BLOCKS * self.BlockMult) then return false end
 	local ground = state.Ground
 	local origin = ground.Position
 	local x = origin.X + math.random(-(PLOT / 2 - 1), PLOT / 2 - 1)
@@ -70,14 +73,30 @@ local function placeBlock(self, player)
 	state.BlockParts[#state.BlockParts + 1] = b
 	state.BlockedCount += 1
 	state.Score = state.BlockedCount
-	self.OnUpdate({
-		Kind = "MatchState",
-		Mode = self.Mode,
-		ActivityId = self.ActivityId,
-		Phase = "running",
-		TimeLeft = math.max(0, self.Duration - (os.clock() - self.StartedAt)),
-		Message = ("Blocks: %d"):format(state.BlockedCount),
-	})
+	-- Throttle per-player place feedback so rapid placement doesn't flood the
+	-- poll Fx queue.
+	local now = os.clock()
+	if not state.LastFx or (now - state.LastFx) >= 0.12 then
+		state.LastFx = now
+		self.OnUpdate({
+			Kind = "MatchState",
+			Mode = self.Mode,
+			ActivityId = self.ActivityId,
+			Phase = "running",
+			TimeLeft = math.max(0, self.Duration - (os.clock() - self.StartedAt)),
+			Message = ("Blocks: %d"):format(state.BlockedCount),
+			Fx = { Kind = "place", TargetUserId = player.UserId, Data = { Blocks = state.BlockedCount } },
+		})
+	else
+		self.OnUpdate({
+			Kind = "MatchState",
+			Mode = self.Mode,
+			ActivityId = self.ActivityId,
+			Phase = "running",
+			TimeLeft = math.max(0, self.Duration - (os.clock() - self.StartedAt)),
+			Message = ("Blocks: %d"):format(state.BlockedCount),
+		})
+	end
 	return true
 end
 
@@ -100,6 +119,8 @@ function Session:Start()
 		end
 	end
 	self.StartedAt = os.clock()
+	local diff = GameConfig.Survival.DifficultyMultipliers[self.Difficulty or "Normal"] or GameConfig.Survival.DifficultyMultipliers.Normal
+	self.BlockMult = diff.BlockMult or 1
 	for _, p in self.Players do
 		self.OnUpdate({ Kind = "MatchState", Mode = self.Mode, ActivityId = self.ActivityId, Phase = "running", TimeLeft = self.Duration, Message = "Build your tower!" })
 	end

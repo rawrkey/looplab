@@ -31,9 +31,22 @@ local function mapUserIds(list)
 	return out
 end
 
-local function pickActivity(round: number, totalRounds: number)
-	local pool = { "chaos_run", "dodge_lab", "build_blitz", "sequence_sprint" }
-	return pool[(round - 1) % #pool + 1]
+local ACTIVITY_POOL = { "chaos_run", "dodge_lab", "build_blitz", "sequence_sprint" }
+
+local function shuffleList(list)
+	for i = #list, 2, -1 do
+		local j = math.random(1, i)
+		list[i], list[j] = list[j], list[i]
+	end
+end
+
+-- Returns a per-match shuffled order of all activities (round order varies
+-- every match, but each activity appears exactly once given Rounds == pool size).
+local function shuffledRoundOrder()
+	local pool = {}
+	for _, id in ACTIVITY_POOL do table.insert(pool, id) end
+	shuffleList(pool)
+	return pool
 end
 
 function Service.StartSurvivalMatch(players: { Player })
@@ -56,6 +69,10 @@ function Service.StartSurvivalMatch(players: { Player })
 		match.survivedRounds[p.UserId] = 0
 	end
 
+	-- Decide the per-match round order up front so the client can show the
+	-- lineup during the lobby (order rotates every match; each game once).
+	match.roundOrder = shuffledRoundOrder()
+
 	-- broadcast lobby
 	for _, p in match.players do
 		_remotes.Events.LobbyUpdate:FireClient(p, {
@@ -64,6 +81,7 @@ function Service.StartSurvivalMatch(players: { Player })
 			LobbySize = GameConfig.Survival.LobbySize,
 			Countdown = GameConfig.Survival.LobbyCountdown,
 			Message = "Survival lobby is filling...",
+			RoundOrder = match.roundOrder,
 		})
 	end
 	task.wait(GameConfig.Survival.LobbyCountdown)
@@ -94,7 +112,7 @@ function Service.StartSurvivalMatch(players: { Player })
 			task.wait(GameConfig.Survival.RoundTransitionSeconds)
 		end
 
-		local activityId = pickActivity(round, match.roundIndex)
+		local activityId = match.roundOrder[round] or ACTIVITY_POOL[(round - 1) % #ACTIVITY_POOL + 1]
 		match.activityId = activityId
 		match.phase = "Running"
 		local res = Service.RunRound(match, activityId)
@@ -114,11 +132,12 @@ function Service.StartSurvivalMatch(players: { Player })
 end
 
 function Service.RunRound(match, activityId: string)
+	local difficulty = GameConfig.Survival.DifficultyProgression[match.roundIndex] or "Normal"
 	for _, p in match.aliveList do
-		_remotes.Events.RoundBegin:FireClient(p, { Round = match.roundIndex, TotalRounds = match.totalRounds, ActivityId = activityId, Mode = "Survival" })
+		_remotes.Events.RoundBegin:FireClient(p, { Round = match.roundIndex, TotalRounds = match.totalRounds, ActivityId = activityId, Mode = "Survival", Difficulty = difficulty })
 	end
 
-	local res = ActivityService.CreateSession(activityId, "Survival", "Normal", match.aliveList)
+	local res = ActivityService.CreateSession(activityId, "Survival", difficulty, match.aliveList)
 	if not res then
 		warn("[Survival] failed to create round session for " .. activityId)
 		return nil
@@ -141,8 +160,8 @@ function Service.ApplyGroupElimination(match, scoresheet)
 	local fraction = GameConfig.Survival.SurvivorFractions[match.roundIndex]
 	if not fraction then fraction = 1 end
 	local keep = math.clamp(math.ceil(#match.aliveList * fraction), 1, #match.aliveList)
-	if match.roundIndex == match.totalRounds then keep = 1 end
 	if keep >= #match.aliveList then keep = #match.aliveList - 1 end
+	if match.roundIndex == match.totalRounds then keep = 1 end
 
 	local sorted = {}
 	for _, row in scoresheet.Rows do
@@ -238,7 +257,7 @@ function Service.FinishMatch(match)
 		PlayerData.SavePlayer(p)
 
 		Leaderboard.SubmitSurvival(p, rank, survived)
-		Daily.RecordProgress(p, "survival", rank)
+		Daily.RecordProgress(p, "survival", rank, rank == 1)
 
 		rewardsByUser[p.UserId] = {
 			Coins = data and data.Coins or 0,
@@ -307,6 +326,8 @@ function Service.GetClientSync(player)
 						LobbySize = GameConfig.Survival.LobbySize,
 						Countdown = GameConfig.Survival.LobbyCountdown,
 						Message = "Survival lobby is filling...",
+						TotalRounds = m.totalRounds,
+						RoundOrder = m.roundOrder,
 					}
 				end
 				return {

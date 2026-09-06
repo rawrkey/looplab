@@ -145,7 +145,7 @@ local function startStandalone(activityId)
 				if p and p.Parent then
 					local granted = RewardService.GrantStandalone(p, i, #scoresheet.Rows, activityId, row.Score, res.sessionId)
 					Leaderboard.SubmitGameScore(activityId, p, row.Score)
-					Daily.RecordProgress(p, activityId, row.Score)
+					Daily.RecordProgress(p, activityId, row.Score, i == 1)
 					PlayerData.RecordRecent(p, { ActivityId = activityId, Mode = "Standalone", Date = os.date("Y-m-d"), Score = row.Score })
 					local fx = Progression.ProcessStandalone(p, i, row.Score, activityId)
 					local data = PlayerData.GetForPlayer(p)

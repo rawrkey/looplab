@@ -22,7 +22,11 @@ local GameConfig = {
 	},
 
 	Xp = {
-		LevelCurve = { 0, 100, 250, 500, 900, 1400, 2000, 2700, 3500, 4500 },
+		-- Cumulative XP threshold to REACH each level (index = level, LevelCurve[1] = 0).
+		-- 50 entries matching MaxLevel = 50. Smooth ramp: early levels fast, later
+		-- slow. Re-deriving this curve is safe: every consumer reads from here and
+		-- players only ever move UP in level, never down.
+		LevelCurve = { 0, 58, 125, 200, 284, 378, 481, 594, 718, 852, 997, 1153, 1321, 1500, 1691, 1895, 2111, 2340, 2583, 2839, 3109, 3393, 3692, 4005, 4333, 4677, 5036, 5411, 5803, 6211, 6636, 7078, 7538, 8015, 8510, 9024, 9556, 10107, 10678, 11268, 11878, 12508, 13159, 13830, 14522, 15236, 15971, 16728, 17508, 18310 },
 		MaxLevel = 50,
 	},
 
@@ -43,7 +47,6 @@ local GameConfig = {
 				SurvivalPlay = 60,
 				SurvivalPodium = 120,
 				SurvivalWin = 200,
-				ScoreCap = 100,
 			},
 		},
 		Survival = {
@@ -91,7 +94,6 @@ local GameConfig = {
 		SurvivalWin = { Xp = 300, Coins = 200 },
 		SurvivalPodium = { Xp = 150, Coins = 100 },
 		DailyChallenge = { Xp = 100, Coins = 60 },
-		Mastery = { MaxCoins = 120, MaxXp = 60 },
 	},
 
 	Daily = {
@@ -126,6 +128,12 @@ local GameConfig = {
 		TiePolicy = "SuddenDeath",
 		SuddenDeathDuration = 15,
 		RandomSeed = 1337,
+		DifficultyProgression = { "Normal", "Hard", "Hard", "Extreme" },
+		DifficultyMultipliers = {
+			Normal = { TimeMult = 1.0, HazardRate = 0.8, HazardMax = 8, ShowMult = 1.0, InputMult = 1.0, BlockMult = 1.0 },
+			Hard = { TimeMult = 0.85, HazardRate = 0.6, HazardMax = 10, ShowMult = 0.85, InputMult = 0.8, BlockMult = 0.85 },
+			Extreme = { TimeMult = 0.7, HazardRate = 0.45, HazardMax = 12, ShowMult = 0.7, InputMult = 0.65, BlockMult = 0.7 },
+		},
 	},
 
 	Leaderboards = {

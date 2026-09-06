@@ -2,6 +2,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Contract = require(ReplicatedStorage.LOOPlab.Shared.ActivityContract)
+local GameConfig = require(ReplicatedStorage.LOOPlab.Configuration.GameConfig)
 
 local Activity = {
 	Id = "chaos_run",
@@ -63,6 +64,7 @@ local function newSession(deps)
 	self.Players = deps.Players
 	self.States = {}
 	self.Finished = false
+	self.TouchConns = {}
 	self.Lane = makeLane()
 	self.Base = makeBase()
 	self.Checkpoints = {}
@@ -80,6 +82,7 @@ function Session:Start()
 	for i = 1, CPCount do
 		local cp = checkpointInstance:Clone()
 		cp.Position = Vector3.new(laneX, LANE_HEIGHT + 3, -TrackLen / 2 + (i - 1) * (TrackLen / (CPCount - 1)))
+		cp:SetAttribute("CPIndex", i)
 		cp.Parent = workspace
 		table.insert(self.Checkpoints, cp)
 	end
@@ -97,8 +100,11 @@ function Session:Start()
 		self.States[player.UserId] = { NextCP = 1, CPMult = 100, Score = 0, Finished = false }
 		local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 		if hum then hum.WalkSpeed = 22 end
+		touchBind(self, player)
 	end
 
+	local diff = GameConfig.Survival.DifficultyMultipliers[self.Difficulty or "Normal"] or GameConfig.Survival.DifficultyMultipliers.Normal
+	self.Duration = math.floor(self.Duration * diff.TimeMult)
 	self.StartedAt = os.clock()
 	for _, p in self.Players do
 		self.OnUpdate({
@@ -130,9 +136,11 @@ function Session:Tick(dt)
 	end
 end
 
-local function touchBind(self, player)
+local function bindCharacter(self, player)
 	local char = player.Character
 	if not char then return end
+	local entry = self.TouchConns[player.UserId]
+	if entry and entry.Conn then entry.Conn:Disconnect() end
 	local body = char:FindFirstChild("HumanoidRootPart")
 	if not body then return end
 	local conn = body.Touched:Connect(function(hit)
@@ -152,16 +160,29 @@ local function touchBind(self, player)
 				Phase = "running",
 				TimeLeft = self.Duration - (os.clock() - self.StartedAt),
 				Message = "Checkpoint hit!",
+				Fx = { Kind = "checkpoint", TargetUserId = player.UserId },
 			})
 			if state.NextCP > CPCount then
 				state.Finished = true
 				state.Score += BASE_SCORE + math.floor((self.Duration - (os.clock() - self.StartedAt)) * 20)
-				self.OnUpdate({ Kind = "MatchState", Mode = self.Mode, ActivityId = self.ActivityId, Phase = "finished", Message = "You finished!" })
+				self.OnUpdate({ Kind = "MatchState", Mode = self.Mode, ActivityId = self.ActivityId, Phase = "finished", Message = "You finished!", Fx = { Kind = "finish", TargetUserId = player.UserId } })
 				self.Finish()
 			end
 		end
 	end)
-	-- keepalive conn? cleanup
+	entry = entry or {}
+	entry.Conn = conn
+	self.TouchConns[player.UserId] = entry
+end
+
+local function touchBind(self, player)
+	bindCharacter(self, player)
+	local addedConn = player.CharacterAdded:Connect(function()
+		bindCharacter(self, player)
+	end)
+	local entry = self.TouchConns[player.UserId] or {}
+	entry.RespawnConn = addedConn
+	self.TouchConns[player.UserId] = entry
 end
 
 function Session:Finish()
@@ -186,20 +207,25 @@ function Session:ForceFinish()
 end
 
 function Session:Cleanup()
+	for _, entry in self.TouchConns do
+		if entry.Conn then entry.Conn:Disconnect() end
+		if entry.RespawnConn then entry.RespawnConn:Disconnect() end
+	end
+	self.TouchConns = {}
 	if self.Lane then self.Lane:Destroy() end
 	if self.Base then self.Base:Destroy() end
 	for _, cp in self.Checkpoints do
 		cp:Destroy()
 	end
+	self.Checkpoints = {}
 end
 
 Activity.Server = {
 	Create = function(deps)
 		local session = newSession(deps)
-		-- ensure checkpoints have attributes
-		for i, cp in session.Checkpoints do
-	cp:SetAttribute("CPIndex", i)
-		end
+		-- Checkpoints are created and tagged in Session:Start, where the
+		-- CPIndex attribute is assigned so touch detection can validate
+		-- progression order server-side.
 		return session
 	end,
 }

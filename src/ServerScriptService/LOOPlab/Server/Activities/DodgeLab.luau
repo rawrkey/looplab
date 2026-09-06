@@ -2,6 +2,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Contract = require(ReplicatedStorage.LOOPlab.Shared.ActivityContract)
+local GameConfig = require(ReplicatedStorage.LOOPlab.Configuration.GameConfig)
 
 local Activity = {
 	Id = "dodge_lab",
@@ -29,6 +30,7 @@ local function newSession(deps)
 	local self = setmetatable({}, Session)
 	self.ActivityId = deps.ActivityId
 	self.Mode = deps.Mode
+	self.Difficulty = deps.Difficulty
 	self.Players = deps.Players
 	self.Duration = deps.Duration
 	self.States = {}
@@ -94,6 +96,7 @@ local function hitHazard(self, player, hazard)
 		Phase = "running",
 		TimeLeft = math.max(0, self.Duration - (os.clock() - self.StartedAt)),
 		Message = ("Hits: %d/%d"):format(state.Hits, START_HITS),
+		Fx = { Kind = "hit", TargetUserId = player.UserId, Data = { Hits = state.Hits, Max = START_HITS } },
 	})
 	if state.Hits >= START_HITS then
 		state.Out = true
@@ -130,6 +133,9 @@ function Session:Start()
 	end
 	self.StartedAt = os.clock()
 	self.Elapsed = 0
+	local diff = GameConfig.Survival.DifficultyMultipliers[self.Difficulty or "Normal"] or GameConfig.Survival.DifficultyMultipliers.Normal
+	self.DiffMult = diff
+	self.Duration = math.floor(self.Duration * diff.TimeMult)
 	for _, p in self.Players do
 		self.OnUpdate({ Kind = "MatchState", Mode = self.Mode, ActivityId = self.ActivityId, Phase = "running", TimeLeft = self.Duration, Message = "Dodge the hazards!" })
 	end
@@ -139,9 +145,11 @@ function Session:Tick(dt)
 	if self.Finished then return end
 	self.Elapsed = os.clock() - self.StartedAt
 	self.TickAcc += dt
-	if self.TickAcc >= 0.8 then
+	local rate = self.DiffMult and self.DiffMult.HazardRate or 0.8
+	local maxH = self.DiffMult and self.DiffMult.HazardMax or HAZARD_COUNT
+	if self.TickAcc >= rate then
 		self.TickAcc = 0
-		if #self.Hazards < HAZARD_COUNT then
+		if #self.Hazards < maxH then
 			spawnHazard(self)
 		end
 	end
